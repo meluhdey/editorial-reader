@@ -1,6 +1,11 @@
 import express from 'express';
 import cors from 'cors';
 import { scrapeAndProcess } from './scraper.js';
+import { existsSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(cors());
@@ -34,6 +39,15 @@ app.post('/api/scrape', async (req, res) => {
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
+
+// Serve Vite frontend in production
+const distPath = join(__dirname, '../dist');
+if (existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (_req, res) => {
+    res.sendFile(join(distPath, 'index.html'));
+  });
+}
 
 const PORT = process.env.PORT ?? 3001;
 app.listen(PORT, () => {

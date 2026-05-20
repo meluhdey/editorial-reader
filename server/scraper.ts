@@ -16,7 +16,7 @@ const td = new TurndownService({
 // Drop purely presentational / noisy elements before converting
 td.remove([
   'script', 'style', 'noscript', 'iframe', 'button', 'input',
-  'select', 'form', 'nav', 'header', 'footer', 'figure > figcaption:empty',
+  'select', 'form', 'nav', 'header', 'footer',
 ]);
 
 // Preserve img tags as raw HTML so width/height attributes survive
