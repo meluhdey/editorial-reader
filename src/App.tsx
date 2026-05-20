@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import type { Article, AppState } from './types';
+import type { Article, AppState, NotebookNote } from './types';
 import Navbar from './components/Navbar';
 import Library from './components/Library';
 import Reader from './components/Reader';
 import IndexGraph from './components/IndexGraph';
 import Spotlight from './components/Spotlight';
+import Notebook from './components/Notebook';
 
 const STORAGE_KEY = 'editorial-reader-v1';
 
@@ -15,10 +16,19 @@ function loadState(): AppState {
     if (raw) {
       const parsed = JSON.parse(raw) as AppState;
       if (!parsed.openArticleIds) parsed.openArticleIds = [];
+      if (!parsed.notebookNotes) parsed.notebookNotes = [];
+      if (parsed.selectedNotebookNoteId === undefined) parsed.selectedNotebookNoteId = null;
       return parsed;
     }
   } catch {}
-  return { articles: [], currentView: 'library', selectedArticleId: null, openArticleIds: [] };
+  return { 
+    articles: [], 
+    currentView: 'library', 
+    selectedArticleId: null, 
+    openArticleIds: [],
+    notebookNotes: [],
+    selectedNotebookNoteId: null
+  };
 }
 
 const pageVariants = {
@@ -100,6 +110,42 @@ export default function App() {
     }));
   };
 
+  const addNotebookNote = (title?: string, content?: string) => {
+    setState((s) => {
+      const newNote: NotebookNote = {
+        id: crypto.randomUUID(),
+        title: title || 'UNTITLED NOTE',
+        content: content || '',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      return {
+        ...s,
+        notebookNotes: [newNote, ...(s.notebookNotes || [])],
+        selectedNotebookNoteId: newNote.id,
+      };
+    });
+  };
+
+  const updateNotebookNote = (updated: NotebookNote) => {
+    setState((s) => ({
+      ...s,
+      notebookNotes: (s.notebookNotes || []).map((n) => (n.id === updated.id ? updated : n)),
+    }));
+  };
+
+  const deleteNotebookNote = (id: string) => {
+    setState((s) => {
+      const nextNotes = (s.notebookNotes || []).filter((n) => n.id !== id);
+      const nextSelected = s.selectedNotebookNoteId === id ? (nextNotes[0]?.id || null) : s.selectedNotebookNoteId;
+      return {
+        ...s,
+        notebookNotes: nextNotes,
+        selectedNotebookNoteId: nextSelected,
+      };
+    });
+  };
+
   const handleSpotlightOpen = (id: string) => {
     navigate('reader', id);
   };
@@ -156,8 +202,24 @@ export default function App() {
               />
             </motion.div>
           )}
+
+          {state.currentView === 'notebook' && (
+            <motion.div key="notebook" className="app-main" {...pageVariants} style={{ height: '100%' }}>
+              <Notebook
+                articles={state.articles}
+                notes={state.notebookNotes || []}
+                selectedNoteId={state.selectedNotebookNoteId || null}
+                onSelectNote={(id) => setState((s) => ({ ...s, selectedNotebookNoteId: id }))}
+                onAddNote={addNotebookNote}
+                onUpdateNote={updateNotebookNote}
+                onDeleteNote={deleteNotebookNote}
+                onOpenArticle={(id) => navigate('reader', id)}
+              />
+            </motion.div>
+          )}
         </AnimatePresence>
       </div>
     </div>
   );
 }
+

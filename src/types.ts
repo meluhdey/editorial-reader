@@ -19,11 +19,22 @@ export interface Article {
   savedAt: number;
 }
 
-export type View = 'library' | 'reader' | 'graph' | 'paste';
+export interface NotebookNote {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type View = 'library' | 'reader' | 'graph' | 'paste' | 'notebook';
 
 export interface AppState {
   articles: Article[];
   currentView: View;
   selectedArticleId: string | null;
   openArticleIds: string[];
+  notebookNotes?: NotebookNote[];
+  selectedNotebookNoteId?: string | null;
 }
+
