@@ -1093,6 +1093,12 @@ mark.hl-underline { background: none; text-decoration: underline; text-decoratio
   border: 1px solid var(--border);
   padding: 3px 8px;
   flex-shrink: 0;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.spotlight-hint:hover {
+  color: var(--ink);
+  background: var(--bg);
 }
 
 .spotlight-status {

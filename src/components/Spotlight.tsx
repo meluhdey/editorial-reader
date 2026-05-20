@@ -119,7 +119,7 @@ export default function Spotlight({ open, onClose, onAdd, onOpen }: SpotlightPro
                 disabled={isLoading || stage === 'done'}
               />
               {url && !isLoading && stage !== 'done' && (
-                <kbd className="spotlight-hint">OPEN</kbd>
+                <button className="spotlight-hint" onClick={handleLoad}>OPEN</button>
               )}
             </div>
 
