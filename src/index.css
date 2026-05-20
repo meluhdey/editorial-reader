@@ -501,11 +501,13 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
 /* Inline editing */
 .reader-editable {
   cursor: text;
-  border-bottom: 1px solid transparent;
-  transition: border-color 0.15s;
+  border-radius: 2px;
+  padding: 0 4px;
+  margin: 0 -4px;
+  transition: background 0.2s;
 }
 .reader-editable:hover {
-  border-bottom-color: var(--border);
+  background: rgba(107, 107, 107, 0.06);
 }
 .reader-editable-placeholder {
   color: var(--faint);
@@ -519,22 +521,24 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
   line-height: 1.1;
   letter-spacing: -0.02em;
   color: var(--ink);
-  background: none;
+  background: rgba(107, 107, 107, 0.06);
   border: none;
-  border-bottom: 1px solid var(--border);
   outline: none;
-  padding: 0;
+  border-radius: 2px;
+  padding: 0 4px;
+  margin: 0 -4px;
 }
 .reader-article-author-input {
   font-family: var(--sans);
   font-size: 15px;
   font-weight: 600;
   color: var(--ink);
-  background: none;
+  background: rgba(107, 107, 107, 0.06);
   border: none;
-  border-bottom: 1px solid var(--border);
   outline: none;
-  padding: 0;
+  border-radius: 2px;
+  padding: 0 4px;
+  margin: 0 -4px;
   width: 100%;
 }
 .reader-article-author-input::placeholder { color: var(--faint); font-weight: 400; }
