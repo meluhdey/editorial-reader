@@ -58,6 +58,23 @@ export default function Reader({ article, onUpdate, onBack, onDelete }: ReaderPr
   const [showColors, setShowColors] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [fontIdx, setFontIdx] = useState(DEFAULT_FONT_IDX);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editingAuthor, setEditingAuthor] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(article.title);
+  const [authorDraft, setAuthorDraft] = useState(article.author ?? '');
+
+  const saveTitle = () => {
+    const t = titleDraft.trim();
+    if (t && t !== article.title) onUpdate({ ...article, title: t });
+    else setTitleDraft(article.title);
+    setEditingTitle(false);
+  };
+
+  const saveAuthor = () => {
+    const a = authorDraft.trim();
+    if (a !== (article.author ?? '')) onUpdate({ ...article, author: a || undefined });
+    setEditingAuthor(false);
+  };
 
   /* ── Tag management ── */
   const addTag = () => {
@@ -115,8 +132,39 @@ export default function Reader({ article, onUpdate, onBack, onDelete }: ReaderPr
         )}
 
         <div className="reader-article-header">
-          <h1 className="reader-article-title">{article.title}</h1>
-          {article.author && <div className="reader-article-author">{article.author}</div>}
+          <h1 className="reader-article-title">
+            {editingTitle ? (
+              <input
+                className="reader-article-title-input"
+                value={titleDraft}
+                autoFocus
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitleDraft(article.title); setEditingTitle(false); } }}
+                onBlur={saveTitle}
+              />
+            ) : (
+              <span className="reader-editable" onClick={() => { setTitleDraft(article.title); setEditingTitle(true); }}>
+                {article.title}
+              </span>
+            )}
+          </h1>
+          <div className="reader-article-author">
+            {editingAuthor ? (
+              <input
+                className="reader-article-author-input"
+                value={authorDraft}
+                autoFocus
+                placeholder="Add author…"
+                onChange={(e) => setAuthorDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') saveAuthor(); if (e.key === 'Escape') { setAuthorDraft(article.author ?? ''); setEditingAuthor(false); } }}
+                onBlur={saveAuthor}
+              />
+            ) : (
+              <span className="reader-editable" onClick={() => { setAuthorDraft(article.author ?? ''); setEditingAuthor(true); }}>
+                {article.author || <span className="reader-editable-placeholder">Add author…</span>}
+              </span>
+            )}
+          </div>
 
             <div className="reader-article-meta">
               <span>{formatDate(article.savedAt)}</span>
