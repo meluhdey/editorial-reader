@@ -110,6 +110,48 @@ export default function App() {
     }));
   };
 
+  const handleSaveUrl = async (url: string) => {
+    // Check if an article with the same URL is already present in state
+    const existing = state.articles.find((a) => a.url === url);
+    if (existing) {
+      navigate('reader', existing.id);
+      return;
+    }
+
+    const res = await fetch('/api/scrape', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status} — failed to scrape`);
+    }
+
+    const newArticle = await res.json() as Article;
+
+    setState((s) => {
+      const exists = s.articles.some((a) => a.url === newArticle.url);
+      const nextArticles = exists ? s.articles : [newArticle, ...s.articles];
+      
+      const targetArticle = s.articles.find((a) => a.url === newArticle.url) || newArticle;
+
+      let nextOpen = s.openArticleIds;
+      if (!s.openArticleIds.includes(targetArticle.id)) {
+        nextOpen = [...s.openArticleIds, targetArticle.id];
+      }
+
+      return {
+        ...s,
+        articles: nextArticles,
+        currentView: 'reader',
+        selectedArticleId: targetArticle.id,
+        openArticleIds: nextOpen,
+      };
+    });
+  };
+
   const addNotebookNote = (title?: string, content?: string) => {
     setState((s) => {
       const newNote: NotebookNote = {
@@ -190,6 +232,7 @@ export default function App() {
                 onUpdate={updateArticle}
                 onBack={() => navigate('library')}
                 onDelete={(id) => deleteArticle(id)}
+                onSaveUrl={handleSaveUrl}
               />
             </motion.div>
           )}

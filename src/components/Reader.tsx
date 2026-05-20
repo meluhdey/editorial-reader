@@ -1,9 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
-import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Trash2, X, BookmarkPlus, Loader2 } from 'lucide-react';
 import type { Article, Highlight } from '../types';
 
 interface ReaderProps {
@@ -11,6 +11,7 @@ interface ReaderProps {
   onUpdate: (article: Article) => void;
   onBack: () => void;
   onDelete: (id: string) => void;
+  onSaveUrl?: (url: string) => Promise<void>;
 }
 
 interface Popup {
@@ -25,18 +26,21 @@ function applyHighlights(markdown: string, highlights: Highlight[]): string {
   for (const h of sorted) {
     try {
       const escaped = h.text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Relax whitespace matching so newlines in markdown match spaces in selection
-      const flexWhitespace = escaped.replace(/\\\s| /g, '\\s+');
-      result = result.replace(
-        new RegExp(`(${flexWhitespace})`, 'gi'),
-        `<mark class="hl-${h.color}" data-hid="${h.id}">$1</mark>`,
-      );
+      // Relax whitespace matching so any whitespace sequence in selection matches any whitespace in markdown (e.g. non-breaking spaces)
+      const flexWhitespace = escaped.replace(/\s+/g, '\\s+');
+      // Bypasses matching target text inside HTML tags by matching HTML tags first
+      const tagOrTextRegex = new RegExp(`(<[^>]+>)|${flexWhitespace}`, 'gi');
+      result = result.replace(tagOrTextRegex, (match, tag) => {
+        if (tag) return match; // Keep tags intact
+        return `<mark class="hl-${h.color}" data-hid="${h.id}">${match}</mark>`;
+      });
     } catch (e) {
       console.error(e);
     }
   }
   return result;
 }
+
 
 function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString('en-US', {
@@ -53,7 +57,7 @@ function hostname(url: string): string {
 const FONT_SIZES = [14, 16, 18, 20, 22, 24];
 const DEFAULT_FONT_IDX = 2; // 18px
 
-export default function Reader({ article, onUpdate, onBack, onDelete }: ReaderProps) {
+export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl }: ReaderProps) {
   const [popup, setPopup] = useState<Popup | null>(null);
   const [showColors, setShowColors] = useState(false);
   const [tagInput, setTagInput] = useState('');
@@ -62,6 +66,28 @@ export default function Reader({ article, onUpdate, onBack, onDelete }: ReaderPr
   const [editingAuthor, setEditingAuthor] = useState(false);
   const [titleDraft, setTitleDraft] = useState(article.title);
   const [authorDraft, setAuthorDraft] = useState(article.author ?? '');
+  const [activeIframeUrl, setActiveIframeUrl] = useState<string | null>(null);
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setIsSaving(false);
+    setSaveError(null);
+  }, [activeIframeUrl]);
+
+  const handleSaveToLibrary = async () => {
+    if (!activeIframeUrl || !onSaveUrl) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onSaveUrl(activeIframeUrl);
+    } catch (err) {
+      console.error('Failed to save to library:', err);
+      setSaveError(err instanceof Error ? err.message : 'Failed to save');
+      setIsSaving(false);
+    }
+  };
 
   const saveTitle = () => {
     const t = titleDraft.trim();
@@ -91,6 +117,13 @@ export default function Reader({ article, onUpdate, onBack, onDelete }: ReaderPr
     const sel = window.getSelection();
     const text = sel?.toString().trim();
     if (!text || text.length < 3) { setPopup(null); return; }
+    
+    // Check if selection spans across line/paragraph breaks to prevent DOM and HTML malformation
+    if (text.includes('\n') || text.includes('\r')) {
+      setPopup(null);
+      return;
+    }
+
     const range = sel!.getRangeAt(0);
     const rect = range.getBoundingClientRect();
     setPopup({ x: rect.left + rect.width / 2, y: rect.top + window.scrollY, text });
@@ -99,13 +132,30 @@ export default function Reader({ article, onUpdate, onBack, onDelete }: ReaderPr
 
   const saveHighlight = (color: string) => {
     if (!popup) return;
-    const highlight: Highlight = {
-      id: crypto.randomUUID(),
-      text: popup.text,
-      color,
-      createdAt: Date.now(),
-    };
-    onUpdate({ ...article, highlights: [...article.highlights, highlight] });
+    const cleanText = popup.text.trim();
+
+    // Prevent duplicate highlights of the exact same text.
+    // If it already exists, update its color or do nothing.
+    const exists = article.highlights.find(h => h.text.trim() === cleanText);
+    if (exists) {
+      if (exists.color === color) {
+        setPopup(null);
+        window.getSelection()?.removeAllRanges();
+        return;
+      }
+      const updated = article.highlights.map(h =>
+        h.id === exists.id ? { ...h, color } : h
+      );
+      onUpdate({ ...article, highlights: updated });
+    } else {
+      const highlight: Highlight = {
+        id: crypto.randomUUID(),
+        text: cleanText,
+        color,
+        createdAt: Date.now(),
+      };
+      onUpdate({ ...article, highlights: [...article.highlights, highlight] });
+    }
     setPopup(null);
     window.getSelection()?.removeAllRanges();
   };
@@ -115,13 +165,26 @@ export default function Reader({ article, onUpdate, onBack, onDelete }: ReaderPr
 
   const handleContentClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
+    const link = target.closest('a');
+    if (link) {
+      const href = link.getAttribute('href');
+      if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+        e.preventDefault();
+        e.stopPropagation();
+        setActiveIframeUrl(href);
+        return;
+      }
+    }
     if (target.tagName !== 'MARK' && !window.getSelection()?.toString()) setPopup(null);
   };
 
   const processedContent = applyHighlights(article.content, article.highlights);
 
   return (
-    <div className="reader">
+    <div 
+      className={`reader ${activeIframeUrl ? 'reader--split' : ''}`}
+      style={{ gridTemplateColumns: activeIframeUrl ? '1fr auto 380px' : '1fr 380px' }}
+    >
 
       {/* ── LEFT: article ── */}
       <div className="reader-left">
@@ -198,6 +261,69 @@ export default function Reader({ article, onUpdate, onBack, onDelete }: ReaderPr
             </ReactMarkdown>
           </div>
         </div>
+
+        {/* ── MIDDLE: split screen iframe ── */}
+        <AnimatePresence>
+          {activeIframeUrl && (
+            <motion.div 
+              className="reader-iframe-pane"
+              initial={{ width: 0 }}
+              animate={{ width: 'min(650px, 45vw)' }}
+              exit={{ width: 0 }}
+              transition={{ type: 'spring', damping: 26, stiffness: 210 }}
+            >
+              <div className="iframe-header">
+                <span className="iframe-domain">{hostname(activeIframeUrl)}</span>
+                <div className="iframe-header-actions">
+                  {onSaveUrl && (
+                    <button
+                      className={`iframe-save-btn ${isSaving ? 'saving' : ''} ${saveError ? 'error' : ''}`}
+                      onClick={handleSaveToLibrary}
+                      disabled={isSaving}
+                      title={saveError || 'Save this page as an article to your library'}
+                    >
+                      {isSaving ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" />
+                          <span>SAVING...</span>
+                        </>
+                      ) : saveError ? (
+                        <span>ERROR</span>
+                      ) : (
+                        <>
+                          <BookmarkPlus size={12} strokeWidth={1.5} />
+                          <span>SAVE +</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <a 
+                    href={activeIframeUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="iframe-external-link"
+                    title="Open in new tab"
+                  >
+                    <ExternalLink size={13} strokeWidth={1.5} />
+                  </a>
+                  <button 
+                    className="iframe-close-btn" 
+                    onClick={() => setActiveIframeUrl(null)}
+                    title="Close split screen"
+                  >
+                    <X size={15} strokeWidth={1.5} />
+                  </button>
+                </div>
+              </div>
+              <iframe 
+                src={`/api/proxy?url=${encodeURIComponent(activeIframeUrl)}`} 
+                title="Split View"
+                className="split-iframe"
+                sandbox="allow-same-origin allow-forms"
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── RIGHT: notes & tools ── */}
         <div className="reader-right">
