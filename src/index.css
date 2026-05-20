@@ -614,14 +614,15 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
 .article-content hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
 
 /* ── Highlights ── */
+mark { background: transparent; color: inherit; }
 mark.hl-yellow { background: rgba(210, 170, 50, 0.22); color: var(--ink); cursor: pointer; padding: 1px 0; }
 mark.hl-yellow:hover { background: rgba(210, 170, 50, 0.4); }
 mark.hl-green { background: #E4FF9B; color: var(--ink); cursor: pointer; padding: 1px 0; }
 mark.hl-blue { background: #C6D2FF; color: var(--ink); cursor: pointer; padding: 1px 0; }
 mark.hl-purple { background: #F0D5FF; color: var(--ink); cursor: pointer; padding: 1px 0; }
 mark.hl-orange { background: #FFE0C6; color: var(--ink); cursor: pointer; padding: 1px 0; }
-mark.hl-bold { background: none; font-weight: bold; color: inherit; padding: 0; cursor: pointer; }
-mark.hl-underline { background: none; text-decoration: underline; text-decoration-color: var(--ink); text-underline-offset: 3px; color: inherit; padding: 0; cursor: pointer; }
+mark.hl-bold { font-weight: bold; color: inherit; padding: 0; cursor: pointer; }
+mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink); text-underline-offset: 3px; color: inherit; padding: 0; cursor: pointer; }
 
 /* ─── HIGHLIGHT POPUP ────────────────────────────────────────────────────── */
 .text-menu-popup {
@@ -737,6 +738,7 @@ mark.hl-underline { background: none; text-decoration: underline; text-decoratio
 .color-circle.green { background: #E4FF9B; }
 .color-circle.purple { background: #F0D5FF; }
 .color-circle.orange { background: #FFE0C6; }
+.color-circle.yellow { background: #FFEAA6; }
 
 /* ─── RIGHT PANEL (notes + highlights) ──────────────────────────────────── */
 .reader-right {

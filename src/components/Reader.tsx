@@ -20,24 +20,179 @@ interface Popup {
   text: string;
 }
 
+function buildCleanTextAndMap(markdown: string) {
+  let cleanText = '';
+  const map: number[] = []; // cleanIndex -> rawIndex
+
+  let i = 0;
+  const len = markdown.length;
+
+  while (i < len) {
+    // 1. Skip HTML tags: <...tag...>
+    if (markdown[i] === '<') {
+      let closeTag = -1;
+      for (let j = i + 1; j < len; j++) {
+        if (markdown[j] === '>') {
+          closeTag = j;
+          break;
+        }
+      }
+      if (closeTag !== -1) {
+        i = closeTag + 1;
+        continue;
+      }
+    }
+
+    // 2. Skip bold/italic/strikethrough syntax
+    // ** or __ (bold)
+    if ((markdown[i] === '*' && markdown[i + 1] === '*') || (markdown[i] === '_' && markdown[i + 1] === '_')) {
+      i += 2;
+      continue;
+    }
+    // ~~ (strikethrough)
+    if (markdown[i] === '~' && markdown[i + 1] === '~') {
+      i += 2;
+      continue;
+    }
+    // * or _ (italic)
+    if (markdown[i] === '*' || markdown[i] === '_') {
+      i += 1;
+      continue;
+    }
+    // ` (inline code)
+    if (markdown[i] === '`') {
+      i += 1;
+      continue;
+    }
+
+    // 3. Links: [text](url)
+    if (markdown[i] === '[') {
+      let closeBracket = -1;
+      let depth = 1;
+      for (let j = i + 1; j < len; j++) {
+        if (markdown[j] === '[') depth++;
+        if (markdown[j] === ']') {
+          depth--;
+          if (depth === 0) {
+            closeBracket = j;
+            break;
+          }
+        }
+      }
+      if (closeBracket !== -1 && markdown[closeBracket + 1] === '(') {
+        let closeParen = -1;
+        for (let k = closeBracket + 2; k < len; k++) {
+          if (markdown[k] === ')') {
+            closeParen = k;
+            break;
+          }
+        }
+        if (closeParen !== -1) {
+          i += 1;
+          continue;
+        }
+      }
+    }
+
+    if (markdown[i] === ']' && markdown[i + 1] === '(') {
+      let closeParen = -1;
+      for (let k = i + 2; k < len; k++) {
+        if (markdown[k] === ')') {
+          closeParen = k;
+          break;
+        }
+      }
+      if (closeParen !== -1) {
+        i = closeParen + 1;
+        continue;
+      }
+    }
+
+    map.push(i);
+    cleanText += markdown[i];
+    i++;
+  }
+
+  map.push(len);
+  return { cleanText, map };
+}
+
 function applyHighlights(markdown: string, highlights: Highlight[]): string {
-  let result = markdown;
-  const sorted = [...highlights].sort((a, b) => b.text.length - a.text.length);
-  for (const h of sorted) {
+  if (highlights.length === 0) return markdown;
+
+  // 1. Build clean text and map
+  const { cleanText, map } = buildCleanTextAndMap(markdown);
+  
+  interface MatchRange {
+    start: number;
+    end: number;
+    color: string;
+    id: string;
+  }
+  
+  const matches: MatchRange[] = [];
+  
+  // 2. Find matches on clean text
+  for (const h of highlights) {
     try {
       const escaped = h.text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Relax whitespace matching so any whitespace sequence in selection matches any whitespace in markdown (e.g. non-breaking spaces)
       const flexWhitespace = escaped.replace(/\s+/g, '\\s+');
-      // Bypasses matching target text inside HTML tags by matching HTML tags first
-      const tagOrTextRegex = new RegExp(`(<[^>]+>)|${flexWhitespace}`, 'gi');
-      result = result.replace(tagOrTextRegex, (match, tag) => {
-        if (tag) return match; // Keep tags intact
-        return `<mark class="hl-${h.color}" data-hid="${h.id}">${match}</mark>`;
-      });
+      const regex = new RegExp(flexWhitespace, 'gi');
+      
+      let match;
+      while ((match = regex.exec(cleanText)) !== null) {
+        const cleanStart = match.index;
+        const cleanEnd = match.index + match[0].length;
+        
+        // Translate clean indices to raw indices using the map
+        const rawStart = map[cleanStart];
+        const rawEnd = map[cleanEnd];
+
+        matches.push({
+          start: rawStart,
+          end: rawEnd,
+          color: h.color,
+          id: h.id,
+        });
+      }
     } catch (e) {
-      console.error(e);
+      console.error('[highlight regex error]', e);
     }
   }
+
+  if (matches.length === 0) return markdown;
+
+  // 3. Collect all boundary offsets
+  const boundariesSet = new Set<number>([0, markdown.length]);
+  for (const m of matches) {
+    boundariesSet.add(m.start);
+    boundariesSet.add(m.end);
+  }
+  const boundaries = Array.from(boundariesSet).sort((a, b) => a - b);
+
+  // 4. Rebuild the document segment by segment
+  let result = '';
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const start = boundaries[i];
+    const end = boundaries[i + 1];
+    const segmentText = markdown.slice(start, end);
+    if (!segmentText) continue;
+
+    // Find all matches covering this segment
+    const covering = matches.filter(m => m.start <= start && m.end >= end);
+    
+    if (covering.length > 0) {
+      // Collect unique colors/styles
+      const colors = Array.from(new Set(covering.map(m => m.color)));
+      const ids = covering.map(m => m.id).join(',');
+      const classes = colors.map(c => `hl-${c}`).join(' ');
+      
+      result += `<mark class="${classes}" data-hid="${ids}">${segmentText}</mark>`;
+    } else {
+      result += segmentText;
+    }
+  }
+
   return result;
 }
 
@@ -134,28 +289,58 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
     if (!popup) return;
     const cleanText = popup.text.trim();
 
-    // Prevent duplicate highlights of the exact same text.
-    // If it already exists, update its color or do nothing.
-    const exists = article.highlights.find(h => h.text.trim() === cleanText);
-    if (exists) {
-      if (exists.color === color) {
-        setPopup(null);
-        window.getSelection()?.removeAllRanges();
-        return;
-      }
-      const updated = article.highlights.map(h =>
-        h.id === exists.id ? { ...h, color } : h
+    const isColorStyle = ['green', 'blue', 'purple', 'orange', 'yellow'].includes(color);
+
+    if (isColorStyle) {
+      // Look for an existing highlight color on the exact same text (case-insensitive)
+      const existingColor = article.highlights.find(
+        h => h.text.trim().toLowerCase() === cleanText.toLowerCase() && ['green', 'blue', 'purple', 'orange', 'yellow'].includes(h.color)
       );
-      onUpdate({ ...article, highlights: updated });
+
+      if (existingColor) {
+        if (existingColor.color === color) {
+          // Toggle off (remove) the highlight if the same color is clicked again
+          const updated = article.highlights.filter(h => h.id !== existingColor.id);
+          onUpdate({ ...article, highlights: updated });
+        } else {
+          // Switch to the new color
+          const updated = article.highlights.map(h =>
+            h.id === existingColor.id ? { ...h, color } : h
+          );
+          onUpdate({ ...article, highlights: updated });
+        }
+      } else {
+        // Create new color highlight
+        const highlight: Highlight = {
+          id: crypto.randomUUID(),
+          text: cleanText,
+          color,
+          createdAt: Date.now(),
+        };
+        onUpdate({ ...article, highlights: [...article.highlights, highlight] });
+      }
     } else {
-      const highlight: Highlight = {
-        id: crypto.randomUUID(),
-        text: cleanText,
-        color,
-        createdAt: Date.now(),
-      };
-      onUpdate({ ...article, highlights: [...article.highlights, highlight] });
+      // Bold or Underline styles (case-insensitive)
+      const existingStyle = article.highlights.find(
+        h => h.text.trim().toLowerCase() === cleanText.toLowerCase() && h.color === color
+      );
+
+      if (existingStyle) {
+        // Toggle off (remove) the style
+        const updated = article.highlights.filter(h => h.id !== existingStyle.id);
+        onUpdate({ ...article, highlights: updated });
+      } else {
+        // Create new style highlight
+        const highlight: Highlight = {
+          id: crypto.randomUUID(),
+          text: cleanText,
+          color,
+          createdAt: Date.now(),
+        };
+        onUpdate({ ...article, highlights: [...article.highlights, highlight] });
+      }
     }
+
     setPopup(null);
     window.getSelection()?.removeAllRanges();
   };
@@ -455,6 +640,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
                   exit={{ opacity: 0, y: 5 }}
                   transition={{ duration: 0.15 }}
                 >
+                  <div className="color-circle yellow" onMouseUp={(e) => { e.stopPropagation(); saveHighlight('yellow'); }} />
                   <div className="color-circle blue" onMouseUp={(e) => { e.stopPropagation(); saveHighlight('blue'); }} />
                   <div className="color-circle green" onMouseUp={(e) => { e.stopPropagation(); saveHighlight('green'); }} />
                   <div className="color-circle purple" onMouseUp={(e) => { e.stopPropagation(); saveHighlight('purple'); }} />
