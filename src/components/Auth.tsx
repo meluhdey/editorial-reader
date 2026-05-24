@@ -84,7 +84,11 @@ export default function Auth({ initialMode = 'signin', onSuccess, onCancel, onGu
         onSuccess();
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'An error occurred during authentication.');
+      let msg = err.message || 'An error occurred during authentication.';
+      if (msg.toLowerCase().includes('failed to fetch')) {
+        msg = 'Failed to fetch (this is usually caused by an ad-blocker, Brave Shields, or a VPN blocking connections to Supabase. Try disabling them for this page and try again).';
+      }
+      setErrorMsg(msg);
       setIsSuccessMsg(false);
     } finally {
       setLoading(false);
