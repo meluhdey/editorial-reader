@@ -897,7 +897,7 @@ export default function Notebook({
               <div className="notebook-dashboard-grid">
                 {filteredInsights.length === 0 ? (
                   <div className="notebook-dashboard-empty">
-                    <FileText size={40} style={{ color: 'var(--border)', marginBottom: '12px' }} />
+                    <FileText size={20} style={{ color: 'var(--border)', marginBottom: '12px' }} />
                     <h3>NO OBSERVATIONS FOUND</h3>
                     <p>Highlight text in articles or write notes to build your knowledge stream.</p>
                   </div>
