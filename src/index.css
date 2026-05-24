@@ -3774,25 +3774,21 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 }
 
 .auth-bypass-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: 12px;
-  background: #ffffff;
-  color: var(--ink);
-  border: 1px solid var(--border);
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  border-radius: 4px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+  text-decoration: underline;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  padding: 4px 8px;
+  transition: color 0.15s ease;
 }
 
 .auth-bypass-btn:hover {
-  background: #fafafa;
-  border-color: var(--ink);
+  background: none;
   color: var(--ink);
 }
 
