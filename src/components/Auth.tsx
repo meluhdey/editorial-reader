@@ -263,7 +263,7 @@ export default function Auth({ initialMode = 'signin', onSuccess, onCancel, onGu
               onClick={onGuestBypass}
               disabled={loading}
             >
-              ✦ ENTER AS LOCAL GUEST (OFFLINE) ✦
+              ENTER AS LOCAL GUEST (OFFLINE)
             </button>
           </div>
         )}

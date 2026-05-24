@@ -510,11 +510,11 @@ export default function Notebook({
             /* Insights quick selector list */
             <div className="notebook-insights-summary-list">
               <div 
-                className={`notebook-insight-summary-card ${!selectedArticleIdFilter && !selectedTag && !selectedColor ? 'active' : ''}`}
+                className={`notebook-insight-summary-card notebook-all-insights-btn ${!selectedArticleIdFilter && !selectedTag && !selectedColor ? 'active' : ''}`}
                 onClick={clearAllFilters}
               >
                 <LayoutGrid size={13} style={{ marginRight: '8px' }} />
-                <span>ALL INSIGHTS ({allInsights.length})</span>
+                <span>All Insights ({allInsights.length})</span>
               </div>
 
               <div className="notebook-sidebar-group-title">ARTICLES</div>

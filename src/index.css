@@ -155,7 +155,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
 
 .navbar-tab-vertical.active .navbar-tab-text {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .navbar-tab-close {
@@ -1821,6 +1821,18 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 .notebook-insight-summary-card.active .count-badge {
   background: rgba(255,255,255,0.2);
   color: var(--bg);
+}
+
+/* Custom All Insights Button Overrides */
+.notebook-insight-summary-card.notebook-all-insights-btn.active {
+  background: transparent !important;
+  color: var(--ink) !important;
+  font-weight: 500;
+}
+
+.notebook-insight-summary-card.notebook-all-insights-btn.active .count-badge {
+  background: rgba(107,107,107,0.1) !important;
+  color: var(--muted) !important;
 }
 
 .notebook-sidebar-group-title {
@@ -3762,23 +3774,26 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 }
 
 .auth-bypass-btn {
-  background: none;
-  border: 1px dashed var(--border);
-  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 12px;
+  background: #ffffff;
+  color: var(--ink);
+  border: 1px solid var(--border);
   font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  padding: 10px 16px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
   border-radius: 4px;
   cursor: pointer;
-  width: 100%;
-  transition: all 0.15s ease;
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .auth-bypass-btn:hover {
+  background: #fafafa;
   border-color: var(--ink);
   color: var(--ink);
-  background: rgba(0, 0, 0, 0.01);
 }
 
 .user-fullname {
