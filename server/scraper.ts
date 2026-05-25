@@ -326,18 +326,30 @@ function cleanAndRemoveHeadersFooters(text: string): string {
   const headerCandidates = new Map<string, number>();
   const footerCandidates = new Map<string, number>();
 
+  // Helper to normalize lines for frequency comparison (replaces all digit sequences with a placeholder)
+  const normalizeForFreq = (line: string): string => {
+    return line
+      .toLowerCase()
+      .replace(/\d+/g, '#')
+      .replace(/\b[ivxldcm]+\b/g, '#')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   for (const lines of pagesLines) {
     const topLines = lines.filter(l => l.length > 0).slice(0, 3);
     for (const line of topLines) {
       if (line.length > 3) {
-        headerCandidates.set(line, (headerCandidates.get(line) || 0) + 1);
+        const norm = normalizeForFreq(line);
+        headerCandidates.set(norm, (headerCandidates.get(norm) || 0) + 1);
       }
     }
 
     const bottomLines = lines.filter(l => l.length > 0).slice(-3);
     for (const line of bottomLines) {
       if (line.length > 3) {
-        footerCandidates.set(line, (footerCandidates.get(line) || 0) + 1);
+        const norm = normalizeForFreq(line);
+        footerCandidates.set(norm, (footerCandidates.get(norm) || 0) + 1);
       }
     }
   }
@@ -345,17 +357,18 @@ function cleanAndRemoveHeadersFooters(text: string): string {
   const repeatedHeaders = new Set<string>();
   const repeatedFooters = new Set<string>();
 
-  headerCandidates.forEach((count, line) => {
-    if (count >= 2) repeatedHeaders.add(line);
+  headerCandidates.forEach((count, norm) => {
+    if (count >= 2) repeatedHeaders.add(norm);
   });
 
-  footerCandidates.forEach((count, line) => {
-    if (count >= 2) repeatedFooters.add(line);
+  footerCandidates.forEach((count, norm) => {
+    if (count >= 2) repeatedFooters.add(norm);
   });
 
   const cleanedPages: string[] = [];
 
-  for (const lines of pagesLines) {
+  for (let pageIdx = 0; pageIdx < pagesLines.length; pageIdx++) {
+    const lines = pagesLines[pageIdx];
     const pageCleaned: string[] = [];
     const topLines = lines.filter(l => l.length > 0).slice(0, 3);
     const bottomLines = lines.filter(l => l.length > 0).slice(-3);
@@ -369,21 +382,32 @@ function cleanAndRemoveHeadersFooters(text: string): string {
         continue;
       }
 
+      // Comprehensive page number and structural page label identifier
       const isPageNum = 
         /^\d+$/.test(trimmed) || 
         /^[ivxldcmIVXLDCM]+$/.test(trimmed) ||
         /^page\s+\d+/i.test(trimmed) ||
         /^\d+\s+of\s+\d+/i.test(trimmed) ||
         /^[-—–]\s*\d+\s*[-—–]$/.test(trimmed) ||
-        /^\[\s*\d+\s*\]$/.test(trimmed);
+        /^\[\s*\d+\s*\]$/.test(trimmed) ||
+        /^(page|pg|p|part|ch|chapter|sec|section)\.?\s*[-–—]?\s*\d+(\s*of\s*\d+)?$/i.test(trimmed) ||
+        /^\d+\s*[-–—]\s*\d+$/.test(trimmed) ||
+        /^[\(\[\{-—–\s\*✦~•]*\d+[\)\]\}-—–\s\*✦~•]*$/.test(trimmed);
 
       if (isPageNum) {
         continue;
       }
 
-      if ((topLines.includes(line) && repeatedHeaders.has(line)) || 
-          (bottomLines.includes(line) && repeatedFooters.has(line))) {
-        continue;
+      // Only strip repeated running headers/footers on pages after the first page (protects article title page metadata)
+      if (pageIdx > 0) {
+        const norm = normalizeForFreq(line);
+        const isTopLine = topLines.includes(line);
+        const isBottomLine = bottomLines.includes(line);
+
+        if ((isTopLine && repeatedHeaders.has(norm)) || 
+            (isBottomLine && repeatedFooters.has(norm))) {
+          continue;
+        }
       }
 
       pageCleaned.push(line);
