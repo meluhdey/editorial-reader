@@ -343,66 +343,70 @@ function extractAndCleanFootnotes(text: string): { cleanedText: string; footnote
       return !isPageNum;
     });
 
-    // 2. Find all footnote starter indices on the page
-    const starterIndices: number[] = [];
+    const bodyLines: string[] = [];
+    const pageFootnotes: string[] = [];
+    let currentFootnote = '';
+    let currentMarker = '';
+    let insideFootnote = false;
+
     for (let i = 0; i < nonPageNumLines.length; i++) {
       const line = nonPageNumLines[i];
-      if (!line) continue;
-
-      const match = line.match(/^(\d+|\*|†|‡|§)\s*(?:\.|\)|\])?\s+(.+)$/);
-      if (match) {
-        // Exclude false positives like section headings:
-        const isLikelySectionHeading = 
-          line.length < 65 && 
-          !/[.\]\)]\s*$/.test(line);
-
-        if (!isLikelySectionHeading) {
-          starterIndices.push(i);
-        }
-      }
-    }
-
-    // 3. If we found starters, extract the footnote block
-    if (starterIndices.length > 0) {
-      const lowestStarterIndex = starterIndices[0];
-      const footnoteLines = nonPageNumLines.slice(lowestStarterIndex);
-      
-      const pageFootnotes: string[] = [];
-      let currentFootnote = '';
-      let currentMarker = '';
-
-      for (const line of footnoteLines) {
-        if (!line) continue;
-        const match = line.match(/^(\d+|\*|†|‡|§)\s*(?:\.|\)|\])?\s+(.+)$/);
-        const isStarter = match && !(line.length < 65 && !/[.\]\)]\s*$/.test(line));
-
-        if (isStarter && match) {
+      if (!line) {
+        if (insideFootnote) {
+          insideFootnote = false;
           if (currentFootnote) {
             pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
-          }
-          currentMarker = match[1];
-          currentFootnote = match[2];
-        } else {
-          if (currentFootnote) {
-            currentFootnote += ' ' + line;
-          } else {
-            currentFootnote = line;
+            currentFootnote = '';
+            currentMarker = '';
           }
         }
+        bodyLines.push('');
+        continue;
       }
 
-      if (currentFootnote) {
-        pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
+      // Check if this line matches a footnote starter
+      const match = line.match(/^(\d+|\*|†|‡|§)\s*(?:\.|\)|\])?\s+(.+)$/);
+      const isLikelySectionHeading = line.length < 65 && !/[.\]\)]\s*$/.test(line);
+      const isStarter = match && !isLikelySectionHeading;
+
+      if (isStarter && match) {
+        if (currentFootnote) {
+          pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
+        }
+        currentMarker = match[1];
+        currentFootnote = match[2];
+        insideFootnote = true;
+      } else {
+        if (insideFootnote) {
+          // Check if the previous line ended a sentence
+          const previousLine = i > 0 ? nonPageNumLines[i - 1] : '';
+          const endedSentence = previousLine ? /[.!?]['"]?\s*$/.test(previousLine) : false;
+
+          // Check if this line starts with metadata or section headers, signaling end of footnote
+          const startsWithMetadata = /^(abstract|keywords|submitted|received|accepted|published|how to cite|copyright|©|doi|isbn|issn)\b/i.test(line);
+          const startsWithSectionHeader = /^\d+\.\s+[A-Z]/i.test(line);
+
+          if (endedSentence && (startsWithMetadata || startsWithSectionHeader)) {
+            insideFootnote = false;
+            pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
+            currentFootnote = '';
+            currentMarker = '';
+            bodyLines.push(line);
+          } else {
+            currentFootnote += ' ' + line;
+          }
+        } else {
+          bodyLines.push(line);
+        }
       }
-
-      globalFootnotes.push(...pageFootnotes);
-
-      // Main body text is everything above the lowest starter index
-      const cleanLines = nonPageNumLines.slice(0, lowestStarterIndex);
-      cleanedPages.push(cleanLines.join('\n'));
-    } else {
-      cleanedPages.push(nonPageNumLines.join('\n'));
     }
+
+    if (currentFootnote) {
+      pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
+    }
+
+    globalFootnotes.push(...pageFootnotes);
+    cleanedPages.push(bodyLines.join('\n'));
   }
 
   const cleanedText = cleanedPages.join('\n\n');
@@ -568,6 +572,88 @@ function cleanPDFText(text: string): string {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
+function extractTitleAndAuthorFromFirstPage(rawText: string, filename: string): { title?: string; author?: string } {
+  // Clean filename for matching
+  const cleanedFileTitle = filename
+    .replace(/\.pdf$/i, '')
+    .replace(/_sup_[^_]+__sup_/gi, '')
+    .replace(/\[.*?\]/g, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const pagesRaw = rawText.split(/-- \d+ of \d+ --/);
+  const firstPage = pagesRaw[0] || '';
+  const lines = firstPage.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  let title: string | undefined = undefined;
+  let author: string | undefined = undefined;
+
+  // 1. Try to find a line in the first page that matches the cleaned filename title (case-insensitive, ignoring symbols)
+  const normFileTitle = cleanedFileTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    const normLine = lines[i].toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (normLine && normFileTitle.includes(normLine) && normLine.length > 10) {
+      // Found the title line!
+      title = lines[i].replace(/[†*‡§]+$/, '').trim(); // Remove footnote markers
+      
+      // Look for the author in the next 1-2 lines
+      for (let j = i + 1; j < Math.min(lines.length, i + 3); j++) {
+        const line = lines[j];
+        if (isLikelyAuthor(line)) {
+          author = line.replace(/^[†*‡§\s]+/, '').trim();
+          break;
+        }
+      }
+      break;
+    }
+  }
+
+  // Helper to validate likely author names
+  function isLikelyAuthor(line: string): boolean {
+    const clean = line.replace(/^[†*‡§\s]+/, '').trim();
+    if (!clean) return false;
+    const words = clean.split(/\s+/);
+    if (words.length < 2 || words.length > 5) return false;
+    
+    const isCapitalized = words.every((w, idx) => {
+      if (idx > 0 && ['and', 'de', 'van', 'der', 'von', '&'].includes(w.toLowerCase())) return true;
+      return /^[A-Z]/.test(w) || (w.includes('.') && /^[A-Z]\./i.test(w));
+    });
+    if (!isCapitalized) return false;
+
+    if (/@/.test(clean)) return false;
+    if (/university|department|school|college|institute|association|society|journal|philosophy|haifa|controversial|ideas/i.test(clean)) return false;
+    return true;
+  }
+
+  // 2. If title wasn't found by filename matching, try finding the first substantial non-metadata line
+  if (!title) {
+    for (let i = 0; i < Math.min(lines.length, 8); i++) {
+      const line = lines[i];
+      // Skip category/journal/metadata lines
+      if (line.length > 10 && 
+          !/^(article|journal|volume|issue|http|doi|page|submitted|accepted|published|abstract|keywords)/i.test(line) &&
+          !/controversial\s+ideas/i.test(line)) {
+        title = line.replace(/[†*‡§]+$/, '').trim();
+        
+        // Try to get author in next 1-2 lines
+        for (let j = i + 1; j < Math.min(lines.length, i + 3); j++) {
+          if (isLikelyAuthor(lines[j])) {
+            author = lines[j].replace(/^[†*‡§\s]+/, '').trim();
+            break;
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  return { title, author };
+}
+
 export async function processPDFBuffer(buffer: Buffer | ArrayBuffer, filename: string, sourceUrl?: string) {
   const parser = new PDFParse({ data: buffer });
   const textResult = await parser.getText();
@@ -581,9 +667,20 @@ export async function processPDFBuffer(buffer: Buffer | ArrayBuffer, filename: s
 
   const content = cleanPDFText(rawText);
 
-  const cleanTitle = filename.replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ').trim();
-  const title = info.info?.Title || info.outline?.[0]?.title || cleanTitle || 'Uploaded PDF';
-  const author = info.info?.Author || undefined;
+  const cleanTitle = filename
+    .replace(/\.pdf$/i, '')
+    .replace(/_sup_[^_]+__sup_/gi, '')
+    .replace(/[-_]+/g, ' ')
+    .trim();
+
+  // Try extracting title and author from the first page text
+  const extracted = extractTitleAndAuthorFromFirstPage(rawText, filename);
+
+  let title = info.info?.Title || '';
+  if (!title || title.toLowerCase() === 'untitled' || title.toLowerCase() === 'introduction') {
+    title = extracted.title || cleanTitle || 'Uploaded PDF';
+  }
+  const author = info.info?.Author || extracted.author || undefined;
 
   return {
     id: crypto.randomUUID(),
