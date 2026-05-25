@@ -317,6 +317,98 @@ function buildFallbackSvg(): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
+function extractAndCleanFootnotes(text: string): { cleanedText: string; footnotes: string[] } {
+  const pagesRaw = text.split(/-- \d+ of \d+ --/);
+  const globalFootnotes: string[] = [];
+  const cleanedPages: string[] = [];
+
+  for (let pageIdx = 0; pageIdx < pagesRaw.length; pageIdx++) {
+    const pageText = pagesRaw[pageIdx];
+    const lines = pageText.split(/\r?\n/).map(line => line.trim());
+    
+    // 1. First, strip page numbers from the page lines
+    const nonPageNumLines = lines.filter(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+      const isPageNum = 
+        /^\d+$/.test(trimmed) || 
+        /^[ivxldcmIVXLDCM]+$/.test(trimmed) ||
+        /^page\s+\d+/i.test(trimmed) ||
+        /^\d+\s+of\s+\d+/i.test(trimmed) ||
+        /^[-—–]\s*\d+\s*[-—–]$/.test(trimmed) ||
+        /^\[\s*\d+\s*\]$/.test(trimmed) ||
+        /^(page|pg|p|part|ch|chapter|sec|section)\.?\s*[-–—]?\s*\d+(\s*of\s*\d+)?$/i.test(trimmed) ||
+        /^\d+\s*[-–—]\s*\d+$/.test(trimmed) ||
+        /^[\(\[\{-—–\s\*✦~•]*\d+[\)\]\}-—–\s\*✦~•]*$/.test(trimmed);
+      return !isPageNum;
+    });
+
+    // 2. Find all footnote starter indices on the page
+    const starterIndices: number[] = [];
+    for (let i = 0; i < nonPageNumLines.length; i++) {
+      const line = nonPageNumLines[i];
+      if (!line) continue;
+
+      const match = line.match(/^(\d+|\*|†|‡|§)\s*(?:\.|\)|\])?\s+(.+)$/);
+      if (match) {
+        // Exclude false positives like section headings:
+        const isLikelySectionHeading = 
+          line.length < 65 && 
+          !/[.\]\)]\s*$/.test(line);
+
+        if (!isLikelySectionHeading) {
+          starterIndices.push(i);
+        }
+      }
+    }
+
+    // 3. If we found starters, extract the footnote block
+    if (starterIndices.length > 0) {
+      const lowestStarterIndex = starterIndices[0];
+      const footnoteLines = nonPageNumLines.slice(lowestStarterIndex);
+      
+      const pageFootnotes: string[] = [];
+      let currentFootnote = '';
+      let currentMarker = '';
+
+      for (const line of footnoteLines) {
+        if (!line) continue;
+        const match = line.match(/^(\d+|\*|†|‡|§)\s*(?:\.|\)|\])?\s+(.+)$/);
+        const isStarter = match && !(line.length < 65 && !/[.\]\)]\s*$/.test(line));
+
+        if (isStarter && match) {
+          if (currentFootnote) {
+            pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
+          }
+          currentMarker = match[1];
+          currentFootnote = match[2];
+        } else {
+          if (currentFootnote) {
+            currentFootnote += ' ' + line;
+          } else {
+            currentFootnote = line;
+          }
+        }
+      }
+
+      if (currentFootnote) {
+        pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
+      }
+
+      globalFootnotes.push(...pageFootnotes);
+
+      // Main body text is everything above the lowest starter index
+      const cleanLines = nonPageNumLines.slice(0, lowestStarterIndex);
+      cleanedPages.push(cleanLines.join('\n'));
+    } else {
+      cleanedPages.push(nonPageNumLines.join('\n'));
+    }
+  }
+
+  const cleanedText = cleanedPages.join('\n\n');
+  return { cleanedText, footnotes: globalFootnotes };
+}
+
 function cleanAndRemoveHeadersFooters(text: string): string {
   const pagesRaw = text.split(/-- \d+ of \d+ --/);
   const pagesLines = pagesRaw.map(page => {
@@ -382,7 +474,7 @@ function cleanAndRemoveHeadersFooters(text: string): string {
         continue;
       }
 
-      // Comprehensive page number and structural page label identifier
+      // Secondary check for page numbers (primary check is in extractAndCleanFootnotes)
       const isPageNum = 
         /^\d+$/.test(trimmed) || 
         /^[ivxldcmIVXLDCM]+$/.test(trimmed) ||
@@ -421,7 +513,8 @@ function cleanAndRemoveHeadersFooters(text: string): string {
 function cleanPDFText(text: string): string {
   if (!text) return '';
 
-  const withoutHeaders = cleanAndRemoveHeadersFooters(text);
+  const { cleanedText, footnotes } = extractAndCleanFootnotes(text);
+  const withoutHeaders = cleanAndRemoveHeadersFooters(cleanedText);
   const lines = withoutHeaders.split(/\r?\n/);
   const cleanedLines: string[] = [];
 
@@ -461,7 +554,16 @@ function cleanPDFText(text: string): string {
     processedText += currentParagraph;
   }
 
-  return processedText.replace(/\n{3,}/g, '\n\n').trim();
+  let finalContent = processedText.replace(/\n{3,}/g, '\n\n').trim();
+
+  if (footnotes.length > 0) {
+    const formattedFootnotes = footnotes
+      .map(fn => fn.replace(/^\[(.+?)\]/, '**$1.**'))
+      .join('\n\n');
+    finalContent += '\n\n## Footnotes\n\n' + formattedFootnotes;
+  }
+
+  return finalContent;
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
