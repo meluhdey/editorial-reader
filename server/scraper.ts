@@ -577,6 +577,28 @@ function cleanPDFText(text: string): string {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
+const CLASSICAL_PAINTINGS = [
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/757px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/Claude_Monet_-_Water_Lilies_-_Google_Art_Project.jpg/800px-Claude_Monet_-_Water_Lilies_-_Google_Art_Project.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/1665_Girl_with_a_Pearl_Earring.jpg/600px-1665_Girl_with_a_Pearl_Earring.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project.jpg/800px-Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg/600px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ae/Katsushika_Hokusai_-_The_Great_Wave_off_Kanagawa_-_Google_Art_Project.jpg/800px-Katsushika_Hokusai_-_The_Great_Wave_off_Kanagawa_-_Google_Art_Project.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/The_Kiss_-_Gustav_Klimt_-_Google_Art_Project.jpg/600px-The_Kiss_-_Gustav_Klimt_-_Google_Art_Project.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/A_Sunday_on_La_Grande_Jatte%2C_Georges_Seurat%2C_1884.jpg/800px-A_Sunday_on_La_Grande_Jatte%2C_Georges_Seurat%2C_1884.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Caspar_David_Friedrich_-_Wanderer_above_the_sea_of_fog.jpg/600px-Caspar_David_Friedrich_-_Wanderer_above_the_sea_of_fog.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/The_Fighting_Temeraire%2C_JMW_Turner%2C_1839.jpg/800px-The_Fighting_Temeraire%2C_JMW_Turner%2C_1839.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/The_Night_Watch_-_Rembrandt_van_Rijn.jpg/800px-The_Night_Watch_-_Rembrandt_van_Rijn.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Edvard_Munch%2C_1893%2C_The_Scream%2C_oil%2C_tempera_and_pastel_on_cardboard%2C_91_x_73.5_cm%2C_National_Gallery_of_Norway.jpg/600px-Edvard_Munch%2C_1893%2C_The_Scream%2C_oil%2C_tempera_and_pastel_on_cardboard%2C_91_x_73.5_cm%2C_National_Gallery_of_Norway.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Las_Meninas_by_Diego_Vel%C3%A1zquez_-_retouched.jpg/800px-Las_Meninas_by_Diego_Vel%C3%A1zquez_-_retouched.jpg',
+  'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Claude_Monet%2C_Impression%2C_soleil_levant.jpg/800px-Claude_Monet%2C_Impression%2C_soleil_levant.jpg'
+];
+
+function getRandomClassicalPainting(): string {
+  const idx = Math.floor(Math.random() * CLASSICAL_PAINTINGS.length);
+  return CLASSICAL_PAINTINGS[idx];
+}
+
 function extractTitleAndAuthorFromFirstPage(rawText: string, filename: string): { title?: string; author?: string } {
   // Clean filename for matching
   const cleanedFileTitle = filename
@@ -694,7 +716,7 @@ export async function processPDFBuffer(buffer: Buffer | ArrayBuffer, filename: s
     content,
     url: sourceUrl || `local-upload://${filename}`,
     tags: ['pdf', 'uploaded'],
-    headerImageUrl: buildFallbackSvg(),
+    headerImageUrl: getRandomClassicalPainting(),
     highlights: [],
     notes: '',
     savedAt: Date.now(),
@@ -731,7 +753,7 @@ export async function scrapeAndProcess(url: string) {
     content,
     url,
     tags,
-    headerImageUrl: headerImageUrl || buildFallbackSvg(),
+    headerImageUrl: headerImageUrl || getRandomClassicalPainting(),
     highlights: [],
     notes: '',
     savedAt: Date.now(),
