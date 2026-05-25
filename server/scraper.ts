@@ -317,8 +317,7 @@ function buildFallbackSvg(): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
-function extractAndCleanFootnotes(text: string): { cleanedText: string; footnotes: string[] } {
-  const pagesRaw = text.split(/-- \d+ of \d+ --/);
+function extractAndCleanFootnotes(pagesRaw: string[]): { cleanedPages: string[]; footnotes: string[] } {
   const globalFootnotes: string[] = [];
   const cleanedPages: string[] = [];
 
@@ -409,12 +408,10 @@ function extractAndCleanFootnotes(text: string): { cleanedText: string; footnote
     cleanedPages.push(bodyLines.join('\n'));
   }
 
-  const cleanedText = cleanedPages.join('\n\n');
-  return { cleanedText, footnotes: globalFootnotes };
+  return { cleanedPages, footnotes: globalFootnotes };
 }
 
-function cleanAndRemoveHeadersFooters(text: string): string {
-  const pagesRaw = text.split(/-- \d+ of \d+ --/);
+function cleanAndRemoveHeadersFooters(pagesRaw: string[]): string[] {
   const pagesLines = pagesRaw.map(page => {
     return page.split(/\r?\n/).map(line => line.trim());
   });
@@ -511,15 +508,23 @@ function cleanAndRemoveHeadersFooters(text: string): string {
     cleanedPages.push(pageCleaned.join('\n'));
   }
 
-  return cleanedPages.join('\n\n');
+  return cleanedPages;
 }
 
 function cleanPDFText(text: string): string {
   if (!text) return '';
 
-  const { cleanedText, footnotes } = extractAndCleanFootnotes(text);
-  const withoutHeaders = cleanAndRemoveHeadersFooters(cleanedText);
-  const lines = withoutHeaders.split(/\r?\n/);
+  const pagesRaw = text.split(/-- \d+ of \d+ --/);
+  
+  // 1. Remove repeated headers/footers using original page splits
+  const withoutHeaders = cleanAndRemoveHeadersFooters(pagesRaw);
+  
+  // 2. Extract footnotes
+  const { cleanedPages, footnotes } = extractAndCleanFootnotes(withoutHeaders);
+  
+  // Join the cleaned pages together for standard paragraph/line joining
+  const cleanedPagesText = cleanedPages.join('\n\n');
+  const lines = cleanedPagesText.split(/\r?\n/);
   const cleanedLines: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
