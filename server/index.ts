@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { scrapeAndProcess } from './scraper.js';
+import { scrapeAndProcess, processPDFBuffer } from './scraper.js';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -10,7 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 app.post('/api/scrape', async (req, res) => {
   const { url } = req.body as { url?: string };
@@ -33,6 +33,26 @@ app.post('/api/scrape', async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[scrape error]', message);
+    res.status(500).json({ error: message });
+  }
+});
+
+app.post('/api/upload-pdf', async (req, res) => {
+  const { name, file } = req.body as { name?: string; file?: string };
+
+  if (!name || !file) {
+    res.status(400).json({ error: 'Name and file payload are required.' });
+    return;
+  }
+
+  try {
+    const base64Data = file.split(';base64,').pop() || '';
+    const buffer = Buffer.from(base64Data, 'base64');
+    const article = await processPDFBuffer(buffer, name);
+    res.json(article);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[pdf upload error]', message);
     res.status(500).json({ error: message });
   }
 });

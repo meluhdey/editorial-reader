@@ -13,8 +13,8 @@ type Stage = 'idle' | 'fetching' | 'extracting' | 'done' | 'error';
 
 const STAGE_MESSAGES: Record<Stage, string> = {
   idle: '',
-  fetching: 'Fetching article…',
-  extracting: 'Extracting content…',
+  fetching: 'Processing document…',
+  extracting: 'Extracting clean text…',
   done: 'Done',
   error: '',
 };
@@ -73,6 +73,52 @@ export default function Spotlight({ open, onClose, onAdd, onOpen }: SpotlightPro
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || stage === 'fetching' || stage === 'extracting') return;
+
+    setError('');
+    setStage('fetching');
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        try {
+          const res = await fetch('/api/upload-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: file.name,
+              file: base64,
+            }),
+          });
+          setStage('extracting');
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error ?? 'Could not parse uploaded PDF');
+          const article = data as Article;
+          onAdd(article);
+          setStage('done');
+          setTimeout(() => {
+            onOpen(article.id);
+            onClose();
+          }, 500);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+          setStage('error');
+        }
+      };
+      reader.onerror = () => {
+        setError('Failed to read local file.');
+        setStage('error');
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStage('error');
+    }
+  };
+
   const isLoading = stage === 'fetching' || stage === 'extracting';
 
   return (
@@ -98,63 +144,78 @@ export default function Spotlight({ open, onClose, onAdd, onOpen }: SpotlightPro
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.2, ease: 'easeOut' }}
             >
-            <div className={`spotlight-input-row ${isLoading ? 'spotlight-input-row--loading' : ''}`}>
-              {(isLoading || stage === 'done') && (
-                <span className="spotlight-icon">
-                  {isLoading ? (
-                    <span className="spotlight-spinner" />
-                  ) : (
-                    '✓'
-                  )}
-                </span>
-              )}
-              <input
-                ref={inputRef}
-                className="spotlight-input"
-                type="url"
-                placeholder="Paste article URL…"
-                value={url}
-                onChange={(e) => { setUrl(e.target.value); setStage('idle'); setError(''); }}
-                onKeyDown={(e) => e.key === 'Enter' && handleLoad()}
-                disabled={isLoading || stage === 'done'}
-              />
-              {url && !isLoading && stage !== 'done' && (
-                <button className="spotlight-hint" onClick={handleLoad}>OPEN</button>
-              )}
-            </div>
+              <div className={`spotlight-input-row ${isLoading ? 'spotlight-input-row--loading' : ''}`}>
+                {(isLoading || stage === 'done') && (
+                  <span className="spotlight-icon">
+                    {isLoading ? (
+                      <span className="spotlight-spinner" />
+                    ) : (
+                      '✓'
+                    )}
+                  </span>
+                )}
+                <input
+                  ref={inputRef}
+                  className="spotlight-input"
+                  type="url"
+                  placeholder="Paste article URL…"
+                  value={url}
+                  onChange={(e) => { setUrl(e.target.value); setStage('idle'); setError(''); }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleLoad()}
+                  disabled={isLoading || stage === 'done'}
+                />
+                {url && !isLoading && stage !== 'done' && (
+                  <button className="spotlight-hint" onClick={handleLoad}>OPEN</button>
+                )}
+              </div>
 
-            <AnimatePresence>
-              {(isLoading || stage === 'done') && (
-                <motion.div
-                  className="spotlight-status"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <div className="spotlight-progress">
-                    <motion.div
-                      className="spotlight-progress-bar"
-                      initial={{ width: '0%' }}
-                      animate={{ width: stage === 'fetching' ? '40%' : stage === 'extracting' ? '80%' : '100%' }}
-                      transition={{ duration: 0.6, ease: 'easeOut' }}
+              {/* Upload PDF link/zone */}
+              {!isLoading && stage !== 'done' && (
+                <div className="spotlight-upload-row">
+                  <label className="spotlight-upload-label">
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      onChange={handleFileUpload}
+                      style={{ display: 'none' }}
                     />
-                  </div>
-                  <span className="spotlight-status-text">{STAGE_MESSAGES[stage]}</span>
-                </motion.div>
+                    <span>✦ UPLOAD .PDF FILE ✦</span>
+                  </label>
+                </div>
               )}
-              {stage === 'error' && (
-                <motion.div
-                  className="spotlight-error"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  {error}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
+
+              <AnimatePresence>
+                {(isLoading || stage === 'done') && (
+                  <motion.div
+                    className="spotlight-status"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="spotlight-progress">
+                      <motion.div
+                        className="spotlight-progress-bar"
+                        initial={{ width: '0%' }}
+                        animate={{ width: stage === 'fetching' ? '40%' : stage === 'extracting' ? '80%' : '100%' }}
+                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                      />
+                    </div>
+                    <span className="spotlight-status-text">{STAGE_MESSAGES[stage]}</span>
+                  </motion.div>
+                )}
+                {stage === 'error' && (
+                  <motion.div
+                    className="spotlight-error"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                  >
+                    {error}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
           </div>
         </>
       )}

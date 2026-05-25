@@ -1183,6 +1183,33 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   overflow: hidden;
 }
 
+.spotlight-upload-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 20px 18px;
+  border-top: 1px dashed var(--border);
+  background: var(--surface);
+}
+
+.spotlight-upload-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 6px 16px;
+  border: 1px dashed var(--border);
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+  user-select: none;
+}
+
+.spotlight-upload-label:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+  background: var(--bg);
+}
+
 /* ─── PASTE VIEW ─────────────────────────────────────────────────────────── */
 .paste-view {
   max-width: 680px;

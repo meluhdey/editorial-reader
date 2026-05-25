@@ -466,6 +466,37 @@ function cleanPDFText(text: string): string {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
+export async function processPDFBuffer(buffer: Buffer | ArrayBuffer, filename: string, sourceUrl?: string) {
+  const parser = new PDFParse({ data: buffer });
+  const textResult = await parser.getText();
+  const info = await parser.getInfo();
+  await parser.destroy();
+
+  const rawText = textResult.text;
+  if (!rawText || rawText.trim().length < 5) {
+    throw new Error('This PDF appears to be empty or contain non-extractable text.');
+  }
+
+  const content = cleanPDFText(rawText);
+
+  const cleanTitle = filename.replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ').trim();
+  const title = info.info?.Title || info.outline?.[0]?.title || cleanTitle || 'Uploaded PDF';
+  const author = info.info?.Author || undefined;
+
+  return {
+    id: crypto.randomUUID(),
+    title: title || 'Untitled PDF',
+    author: author || undefined,
+    content,
+    url: sourceUrl || `local-upload://${filename}`,
+    tags: ['pdf', 'uploaded'],
+    headerImageUrl: buildFallbackSvg(),
+    highlights: [],
+    notes: '',
+    savedAt: Date.now(),
+  };
+}
+
 export async function scrapeAndProcess(url: string) {
   const res = await fetchResource(url);
   const contentType = res.headers.get('content-type') || '';
@@ -474,44 +505,8 @@ export async function scrapeAndProcess(url: string) {
 
   if (isPdf) {
     const arrayBuffer = await res.arrayBuffer();
-    const parser = new PDFParse({ data: arrayBuffer });
-    const textResult = await parser.getText();
-    const info = await parser.getInfo();
-    await parser.destroy();
-
-    const rawText = textResult.text;
-    if (!rawText || rawText.trim().length < 5) {
-      throw new Error('This PDF appears to be empty or contain non-extractable text.');
-    }
-
-    const content = cleanPDFText(rawText);
-
-    const urlTitle = (() => {
-      try {
-        const segments = new URL(url).pathname.split('/');
-        const last = segments[segments.length - 1];
-        if (last) {
-          return decodeURIComponent(last).replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ').trim();
-        }
-      } catch {}
-      return 'Untitled PDF';
-    })();
-
-    const title = info.info?.Title || info.outline?.[0]?.title || urlTitle;
-    const author = info.info?.Author || undefined;
-
-    return {
-      id: crypto.randomUUID(),
-      title: title || 'Untitled PDF',
-      author: author || undefined,
-      content,
-      url,
-      tags: ['pdf'],
-      headerImageUrl: buildFallbackSvg(),
-      highlights: [],
-      notes: '',
-      savedAt: Date.now(),
-    };
+    const filename = url.split('/').pop() || 'scraped.pdf';
+    return processPDFBuffer(arrayBuffer, filename, url);
   }
 
   const html = await res.text();
