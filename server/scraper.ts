@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
+import { PDFParse } from 'pdf-parse';
 
 const GOOGLEBOT_UA =
   'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
@@ -37,18 +38,18 @@ td.addRule('images', {
 
 // ── Fetch ──────────────────────────────────────────────────────────────────
 
-async function fetchPage(url: string): Promise<string> {
+async function fetchResource(url: string): Promise<Response> {
   const res = await fetch(url, {
     headers: {
       'User-Agent': GOOGLEBOT_UA,
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.9',
       'Cache-Control': 'no-cache',
     },
     redirect: 'follow',
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} — could not fetch ${url}`);
-  return res.text();
+  return res;
 }
 
 // ── Meta extraction (cheerio, lightweight) ─────────────────────────────────
@@ -316,10 +317,102 @@ function buildFallbackSvg(): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
+function cleanPDFText(text: string): string {
+  if (!text) return '';
+
+  const lines = text.split(/\r?\n/);
+  const cleanedLines: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) {
+      cleanedLines.push('');
+      continue;
+    }
+    const normalized = line.replace(/\s+/g, ' ');
+    cleanedLines.push(normalized);
+  }
+
+  let processedText = '';
+  let currentParagraph = '';
+
+  for (const line of cleanedLines) {
+    if (line === '') {
+      if (currentParagraph) {
+        processedText += currentParagraph + '\n\n';
+        currentParagraph = '';
+      }
+    } else {
+      if (currentParagraph) {
+        if (currentParagraph.endsWith('-')) {
+          currentParagraph = currentParagraph.slice(0, -1) + line;
+        } else {
+          currentParagraph += ' ' + line;
+        }
+      } else {
+        currentParagraph = line;
+      }
+    }
+  }
+
+  if (currentParagraph) {
+    processedText += currentParagraph;
+  }
+
+  return processedText.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────
 
 export async function scrapeAndProcess(url: string) {
-  const html = await fetchPage(url);
+  const res = await fetchResource(url);
+  const contentType = res.headers.get('content-type') || '';
+  const cleanUrl = url.toLowerCase().split('?')[0].split('#')[0];
+  const isPdf = contentType.includes('application/pdf') || cleanUrl.endsWith('.pdf');
+
+  if (isPdf) {
+    const arrayBuffer = await res.arrayBuffer();
+    const parser = new PDFParse({ data: arrayBuffer });
+    const textResult = await parser.getText();
+    const info = await parser.getInfo();
+    await parser.destroy();
+
+    const rawText = textResult.text;
+    if (!rawText || rawText.trim().length < 5) {
+      throw new Error('This PDF appears to be empty or contain non-extractable text.');
+    }
+
+    const content = cleanPDFText(rawText);
+
+    const urlTitle = (() => {
+      try {
+        const segments = new URL(url).pathname.split('/');
+        const last = segments[segments.length - 1];
+        if (last) {
+          return decodeURIComponent(last).replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ').trim();
+        }
+      } catch {}
+      return 'Untitled PDF';
+    })();
+
+    const title = info.info?.Title || info.outline?.[0]?.title || urlTitle;
+    const author = info.info?.Author || undefined;
+
+    return {
+      id: crypto.randomUUID(),
+      title: title || 'Untitled PDF',
+      author: author || undefined,
+      content,
+      url,
+      tags: ['pdf'],
+      headerImageUrl: buildFallbackSvg(),
+      highlights: [],
+      notes: '',
+      savedAt: Date.now(),
+    };
+  }
+
+  const html = await res.text();
 
   const [{ title, author, headerImageUrl }, tags, content] = await Promise.all([
     Promise.resolve(extractMeta(html, url)),
