@@ -340,7 +340,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #d2aa32; /* default yellow highlight color */
+  background-color: #d2aa32; /* default yellow highlight color fallback */
   opacity: 0;
   transition: opacity 0.3s ease;
   pointer-events: none;
@@ -348,8 +348,14 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
   z-index: 1;
 }
 
+.lib-card-img-wrap.hover-color-yellow::after { background-color: #d2aa32; }
+.lib-card-img-wrap.hover-color-green::after  { background-color: #e4ff9b; }
+.lib-card-img-wrap.hover-color-blue::after   { background-color: #c6d2ff; }
+.lib-card-img-wrap.hover-color-purple::after { background-color: #f0d5ff; }
+.lib-card-img-wrap.hover-color-orange::after { background-color: #ffe0c6; }
+
 .lib-card:hover .lib-card-img-wrap::after {
-  opacity: 0.45;
+  opacity: 0.65;
 }
 
 .lib-card-img {

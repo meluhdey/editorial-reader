@@ -29,6 +29,16 @@ function extractSource(url: string): string {
 
 type SortOrder = 'newest' | 'oldest';
 
+const highlightColors = ['yellow', 'green', 'blue', 'purple', 'orange'];
+
+function hashId(id: string): number {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash);
+}
+
 export default function Library({ articles, onSelect, onDelete }: LibraryProps) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -182,7 +192,7 @@ export default function Library({ articles, onSelect, onDelete }: LibraryProps) 
               onClick={() => onSelect(article.id)}
             >
               {/* Image area */}
-              <div className="lib-card-img-wrap">
+              <div className={`lib-card-img-wrap hover-color-${highlightColors[hashId(article.id) % highlightColors.length]}`}>
                 {article.headerImageUrl ? (
                   <img
                     className="lib-card-img"
