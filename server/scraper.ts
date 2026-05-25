@@ -317,10 +317,88 @@ function buildFallbackSvg(): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
+function cleanAndRemoveHeadersFooters(text: string): string {
+  const pagesRaw = text.split(/-- \d+ of \d+ --/);
+  const pagesLines = pagesRaw.map(page => {
+    return page.split(/\r?\n/).map(line => line.trim());
+  });
+
+  const headerCandidates = new Map<string, number>();
+  const footerCandidates = new Map<string, number>();
+
+  for (const lines of pagesLines) {
+    const topLines = lines.filter(l => l.length > 0).slice(0, 3);
+    for (const line of topLines) {
+      if (line.length > 3) {
+        headerCandidates.set(line, (headerCandidates.get(line) || 0) + 1);
+      }
+    }
+
+    const bottomLines = lines.filter(l => l.length > 0).slice(-3);
+    for (const line of bottomLines) {
+      if (line.length > 3) {
+        footerCandidates.set(line, (footerCandidates.get(line) || 0) + 1);
+      }
+    }
+  }
+
+  const repeatedHeaders = new Set<string>();
+  const repeatedFooters = new Set<string>();
+
+  headerCandidates.forEach((count, line) => {
+    if (count >= 2) repeatedHeaders.add(line);
+  });
+
+  footerCandidates.forEach((count, line) => {
+    if (count >= 2) repeatedFooters.add(line);
+  });
+
+  const cleanedPages: string[] = [];
+
+  for (const lines of pagesLines) {
+    const pageCleaned: string[] = [];
+    const topLines = lines.filter(l => l.length > 0).slice(0, 3);
+    const bottomLines = lines.filter(l => l.length > 0).slice(-3);
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        pageCleaned.push('');
+        continue;
+      }
+
+      const isPageNum = 
+        /^\d+$/.test(trimmed) || 
+        /^[ivxldcmIVXLDCM]+$/.test(trimmed) ||
+        /^page\s+\d+/i.test(trimmed) ||
+        /^\d+\s+of\s+\d+/i.test(trimmed) ||
+        /^[-—–]\s*\d+\s*[-—–]$/.test(trimmed) ||
+        /^\[\s*\d+\s*\]$/.test(trimmed);
+
+      if (isPageNum) {
+        continue;
+      }
+
+      if ((topLines.includes(line) && repeatedHeaders.has(line)) || 
+          (bottomLines.includes(line) && repeatedFooters.has(line))) {
+        continue;
+      }
+
+      pageCleaned.push(line);
+    }
+    cleanedPages.push(pageCleaned.join('\n'));
+  }
+
+  return cleanedPages.join('\n\n');
+}
+
 function cleanPDFText(text: string): string {
   if (!text) return '';
 
-  const lines = text.split(/\r?\n/);
+  const withoutHeaders = cleanAndRemoveHeadersFooters(text);
+  const lines = withoutHeaders.split(/\r?\n/);
   const cleanedLines: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
