@@ -333,6 +333,25 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
   background: #D3D3C8;
 }
 
+.lib-card-img-wrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #d2aa32; /* default yellow highlight color */
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  z-index: 1;
+}
+
+.lib-card:hover .lib-card-img-wrap::after {
+  opacity: 0.45;
+}
+
 .lib-card-img {
   width: 100%;
   height: 100%;
@@ -344,7 +363,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
   transition: filter 0.3s ease;
 }
 .lib-card:hover .lib-card-img {
-  filter: grayscale(1) brightness(0.5);
+  filter: grayscale(1) brightness(0.95);
 }
 
 .lib-card-img--placeholder {
@@ -360,6 +379,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  z-index: 2;
 }
 
 .lib-card-tag {
@@ -386,6 +406,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s;
+  z-index: 2;
 }
 .lib-card:hover .lib-card-delete { opacity: 1; }
 .lib-card-delete:hover { background: var(--ink); color: var(--bg); }
