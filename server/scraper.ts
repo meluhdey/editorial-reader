@@ -2,7 +2,7 @@ import * as cheerio from 'cheerio';
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
-import { PDFParse } from 'pdf-parse';
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 const GOOGLEBOT_UA =
   'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
@@ -772,12 +772,25 @@ function extractTitleAndAuthorFromFirstPage(rawText: string, filename: string): 
 }
 
 export async function processPDFBuffer(buffer: Buffer | ArrayBuffer, filename: string, sourceUrl?: string) {
-  const parser = new PDFParse({ data: buffer });
-  const textResult = await parser.getText();
-  const info = await parser.getInfo();
-  await parser.destroy();
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(buffer),
+    useSystemFonts: true,
+    disableFontFace: true,
+  });
 
-  const rawText = textResult.text;
+  const pdfDocument = await loadingTask.promise;
+  const metadata = await pdfDocument.getMetadata().catch(() => null);
+
+  let rawText = '';
+  for (let i = 1; i <= pdfDocument.numPages; i++) {
+    const page = await pdfDocument.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items
+      .map((item: any) => item.str)
+      .join(' ');
+    rawText += pageText + `\n-- ${i} of ${pdfDocument.numPages} --\n`;
+  }
+
   if (!rawText || rawText.trim().length < 5) {
     throw new Error('This PDF appears to be empty or contain non-extractable text.');
   }
@@ -793,11 +806,12 @@ export async function processPDFBuffer(buffer: Buffer | ArrayBuffer, filename: s
   // Try extracting title and author from the first page text
   const extracted = extractTitleAndAuthorFromFirstPage(rawText, filename);
 
-  let title = info.info?.Title || '';
+  const infoObj = metadata?.info as any;
+  let title = infoObj?.Title || '';
   if (!title || title.toLowerCase() === 'untitled' || title.toLowerCase() === 'introduction') {
     title = extracted.title || cleanTitle || 'Uploaded PDF';
   }
-  const author = info.info?.Author || extracted.author || undefined;
+  const author = infoObj?.Author || extracted.author || undefined;
 
   return {
     id: crypto.randomUUID(),
