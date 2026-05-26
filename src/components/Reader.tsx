@@ -257,6 +257,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const [pdfViewMode, setPdfViewMode] = useState<'text' | 'original'>('text');
+  const [pdfColumns, setPdfColumns] = useState<1 | 2>(2);
 
   const isPdfArticle = article.tags.includes('pdf');
 
@@ -422,18 +423,39 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
       >
         {isPdfArticle && (
           <div className="pdf-tab-bar">
-            <button 
-              className={`pdf-tab-btn ${pdfViewMode === 'text' ? 'pdf-tab-btn--active' : ''}`}
-              onClick={() => setPdfViewMode('text')}
-            >
-              ✦ TEXT READER (ANNOTATABLE) ✦
-            </button>
-            <button 
-              className={`pdf-tab-btn ${pdfViewMode === 'original' ? 'pdf-tab-btn--active' : ''}`}
-              onClick={() => setPdfViewMode('original')}
-            >
-              ✦ ORIGINAL DOCUMENT (READ-ONLY) ✦
-            </button>
+            <div className="pdf-tab-group">
+              <button 
+                className={`pdf-tab-btn ${pdfViewMode === 'text' ? 'pdf-tab-btn--active' : ''}`}
+                onClick={() => setPdfViewMode('text')}
+              >
+                ✦ TEXT READER (ANNOTATABLE) ✦
+              </button>
+              <button 
+                className={`pdf-tab-btn ${pdfViewMode === 'original' ? 'pdf-tab-btn--active' : ''}`}
+                onClick={() => setPdfViewMode('original')}
+              >
+                ✦ ORIGINAL DOCUMENT (READ-ONLY) ✦
+              </button>
+            </div>
+
+            {pdfViewMode === 'text' && (
+              <div className="pdf-layout-controls">
+                <button 
+                  className={`pdf-layout-btn ${pdfColumns === 1 ? 'active' : ''}`}
+                  onClick={() => setPdfColumns(1)}
+                  title="Single Column Layout"
+                >
+                  1 COLUMN
+                </button>
+                <button 
+                  className={`pdf-layout-btn ${pdfColumns === 2 ? 'active' : ''}`}
+                  onClick={() => setPdfColumns(2)}
+                  title="Two Column Academic Layout"
+                >
+                  2 COLUMNS
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -450,7 +472,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
             {isPdfArticle && pdfViewMode === 'text' ? (
               <div className="pdf-viewer-workspace" onMouseUp={handleMouseUp} onClick={handleContentClick}>
                 {pdfPages.map((pageText, idx) => (
-                  <div key={idx} className="pdf-page-sim-sheet">
+                  <div key={idx} className={`pdf-page-sim-sheet ${pdfColumns === 2 ? 'pdf-page--two-columns' : ''}`}>
                     <div className="pdf-page-header">
                       <span>{article.title}</span>
                       <span className="pdf-page-num">PAGE {idx + 1} OF {pdfPages.length}</span>

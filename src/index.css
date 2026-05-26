@@ -3995,4 +3995,67 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   display: block;
 }
 
+/* Dynamic academic layouts and multi-column settings */
+.pdf-layout-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+}
+
+.pdf-layout-btn {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pdf-layout-btn:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+
+.pdf-layout-btn.active {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+/* Two-column typography layout splits */
+.pdf-page-sim-sheet.pdf-page--two-columns {
+  max-width: 960px; /* Expand sheet width for comfortable double columns */
+}
+
+.pdf-page-sim-sheet.pdf-page--two-columns .article-content {
+  column-count: 2;
+  column-gap: 48px;
+  column-rule: 1px dashed var(--border);
+  text-align: justify;
+  text-justify: inter-word;
+  hyphens: auto;
+}
+
+/* Standard APA/Chicago Manual of Style indents for academic pages */
+.pdf-page-sim-sheet.pdf-page--two-columns .article-content p {
+  text-indent: 1.8em;
+  margin-bottom: 0;
+  margin-top: 0;
+  line-height: 1.6;
+}
+
+/* No indent on the first paragraph or after header sections */
+.pdf-page-sim-sheet.pdf-page--two-columns .article-content h1 + p,
+.pdf-page-sim-sheet.pdf-page--two-columns .article-content h2 + p,
+.pdf-page-sim-sheet.pdf-page--two-columns .article-content h3 + p,
+.pdf-page-sim-sheet.pdf-page--two-columns .article-content p:first-of-type {
+  text-indent: 0;
+}
+
 
