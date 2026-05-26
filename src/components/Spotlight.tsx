@@ -58,8 +58,20 @@ export default function Spotlight({ open, onClose, onAdd, onOpen }: SpotlightPro
         body: JSON.stringify({ url: trimmed }),
       });
       setStage('extracting');
+      
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        let errorMsg = 'Could not load article';
+        try {
+          const parsed = JSON.parse(text);
+          errorMsg = parsed.error ?? errorMsg;
+        } catch {
+          errorMsg = `Server error (${res.status}): ${text.substring(0, 150) || res.statusText}`;
+        }
+        throw new Error(errorMsg);
+      }
+      
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Could not load article');
       const article = data as Article;
       onAdd(article);
       setStage('done');
