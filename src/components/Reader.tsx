@@ -6,6 +6,36 @@ import rehypeRaw from 'rehype-raw';
 import { ArrowLeft, ExternalLink, Trash2, X, BookmarkPlus, Loader2 } from 'lucide-react';
 import type { Article, Highlight } from '../types';
 
+const fallbackPaintings = [
+  'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=800&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=800&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?q=80&w=800&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1578301978018-3005759f48f7?q=80&w=800&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1576016770956-debb63d900ee?q=80&w=800&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1580136579312-94651dfd596d?q=80&w=800&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1605721911519-3dfeb3be25e7?q=80&w=800&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1584727638096-042c45049edd?q=80&w=800&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1579783928621-7a13d66a62d1?q=80&w=800&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1580136608260-4eb11f4b24fe?q=80&w=800&auto=format&fit=crop'
+];
+
+function hashId(id: string): number {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash);
+}
+
+function getReaderImageUrl(article: Article): string {
+  const url = article.headerImageUrl;
+  if (!url || url.includes('upload.wikimedia.org')) {
+    const idx = hashId(article.id) % fallbackPaintings.length;
+    return fallbackPaintings[idx];
+  }
+  return url;
+}
+
 interface ReaderProps {
   article: Article;
   onUpdate: (article: Article) => void;
@@ -373,11 +403,18 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
 
       {/* ── LEFT: article ── */}
       <div className="reader-left">
-        {article.headerImageUrl ? (
-          <img className="reader-article-img" src={article.headerImageUrl} alt="" />
-        ) : (
-          <div className="reader-article-img" />
-        )}
+        <img
+          className="reader-article-img"
+          src={getReaderImageUrl(article)}
+          alt=""
+          onError={(e) => {
+            const target = e.currentTarget;
+            const fallback = fallbackPaintings[hashId(article.id) % fallbackPaintings.length];
+            if (target.src !== fallback) {
+              target.src = fallback;
+            }
+          }}
+        />
 
         <div className="reader-article-header">
           <h1 className="reader-article-title">
