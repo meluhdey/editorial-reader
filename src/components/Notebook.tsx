@@ -2,100 +2,10 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trash2, Search, Plus, Filter, BookOpen, Copy, PlusCircle, LayoutGrid, FileText, ChevronLeft, ChevronRight, X, Bold, Italic, Underline } from 'lucide-react';
 import type { Article, NotebookNote, Highlight } from '../types';
-import TurndownService from 'turndown';
+import { htmlToMarkdown, markdownToHtml } from '../lib/markdown';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
-
-const turndownService = new TurndownService({
-  headingStyle: 'atx',
-  bullet: '-'
-});
-
-// Preserve <u> tags exactly
-turndownService.addRule('underline', {
-  filter: ['u'],
-  replacement: (content) => `<u>${content}</u>`
-});
-
-// Preserve embedded insight cards exactly
-turndownService.addRule('embeddedInsight', {
-  filter: (node) => {
-    return node.nodeName === 'DIV' && node.classList.contains('embedded-insight');
-  },
-  replacement: (content, node) => {
-    return '\n\n' + (node as any).outerHTML.trim() + '\n\n';
-  }
-});
-
-function htmlToMarkdown(html: string): string {
-  if (!html) return '';
-  return turndownService.turndown(html);
-}
-
-function markdownToHtml(md: string): string {
-  if (!md) return '';
-
-  // Protect embedded insight cards from markdown replacement
-  const htmlBlocks: string[] = [];
-  let placeholderCounter = 0;
-
-  const cleanedMd = md.replace(/<div class="embedded-insight[\s\S]*?<\/div>\s*(<p><br><\/p>)?/g, (match) => {
-    htmlBlocks.push(match);
-    return `<!--EMBEDDED_INSIGHT_PLACEHOLDER_${placeholderCounter++}-->`;
-  });
-
-  let html = cleanedMd;
-
-  // Let's replace basic markdown inline tags:
-  
-  // Headers (h1, h2, h3)
-  html = html.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
-  html = html.replace(/^# (.*?)$/gm, '<h1>$1</h1>');
-
-  // Blockquotes
-  html = html.replace(/^> (.*?)$/gm, '<blockquote>$1</blockquote>');
-
-  // Unordered Lists
-  html = html.replace(/^[-\*] (.*?)$/gm, '<li>$1</li>');
-
-  // Bold
-  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
-
-  // Italics
-  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  html = html.replace(/_(.*?)_/g, '<em>$1</em>');
-
-  // Underline
-  html = html.replace(/~~(.*?)~~/g, '<u>$1</u>');
-
-  // Let's convert plain text paragraphs:
-  const lines = html.split(/\n/);
-  const processedLines = lines.map(line => {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      return '<p><br></p>';
-    }
-
-    // Check if it's already a block tag
-    if (/^<(h1|h2|h3|blockquote|li|div|p)/i.test(trimmed) || trimmed.startsWith('<!--EMBEDDED_INSIGHT_PLACEHOLDER_')) {
-      return trimmed;
-    }
-
-    return `<p>${line}</p>`;
-  });
-  
-  html = processedLines.join('\n');
-
-  // Restore embedded insights
-  html = html.replace(/<!--EMBEDDED_INSIGHT_PLACEHOLDER_(\d+)-->/g, (match, index) => {
-    return htmlBlocks[parseInt(index, 10)] || '';
-  });
-
-  return html;
-}
 
 function stripMarkdownAndHtml(text: string): string {
   if (!text) return '';
@@ -220,6 +130,24 @@ export default function Notebook({
     const text = e.clipboardData.getData('text/plain');
     document.execCommand('insertText', false, text);
     handleEditableInput();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === ' ') {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+      const node = range.startContainer;
+      const textContent = node.textContent || '';
+      const offset = range.startOffset;
+
+      if (offset === 1 && (textContent.trim() === '-' || textContent.trim() === '*')) {
+        e.preventDefault();
+        document.execCommand('delete', false);
+        document.execCommand('insertUnorderedList', false);
+        handleEditableInput();
+      }
+    }
   };
 
   // Extract all unique highlights and notes across all articles
@@ -496,7 +424,7 @@ export default function Notebook({
                         onClick={() => onSelectNote(note.id)}
                       >
                         <h4 className="notebook-note-card-title">
-                          {note.title.toUpperCase()}
+                          {note.title}
                         </h4>
                         <p className="notebook-note-card-snippet">"{previewText}"</p>
                         <span className="notebook-note-card-date">{formatDate(note.updatedAt)}</span>
@@ -632,7 +560,7 @@ export default function Notebook({
                         className="notebook-editor-title-span"
                         onClick={() => setIsEditingTitle(true)}
                       >
-                        {titleDraft || 'UNTITLED NOTE'}
+                        {titleDraft || 'Untitled note'}
                       </span>
                     )}
                   </h1>
@@ -674,6 +602,7 @@ export default function Notebook({
                       placeholder="Weave your thoughts and insights here. Bold, italics, and underline supported..."
                       onInput={handleEditableInput}
                       onPaste={handlePaste}
+                      onKeyDown={handleKeyDown}
                       suppressContentEditableWarning
                     />
                   ) : (
@@ -959,7 +888,7 @@ export default function Notebook({
                                   injectInsightIntoNote(ins);
                                 }, 300);
                               }}
-                              title={`Append to note: "${notes[0].title.toUpperCase()}"`}
+                              title={`Append to note: "${notes[0].title}"`}
                             >
                               <PlusCircle size={12} style={{ marginRight: '4px' }} />
                               APPEND

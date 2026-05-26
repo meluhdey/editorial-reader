@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
-import { ArrowLeft, ExternalLink, Trash2, X, BookmarkPlus, Loader2 } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Trash2, X, BookmarkPlus, Loader2, Bold, Italic, Underline } from 'lucide-react';
 import type { Article, Highlight } from '../types';
+import { htmlToMarkdown, markdownToHtml } from '../lib/markdown';
 
 const fallbackPaintings = [
   'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=800&auto=format&fit=crop',
@@ -295,6 +296,61 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
     const a = authorDraft.trim();
     if (a !== (article.author ?? '')) onUpdate({ ...article, author: a || undefined });
     setEditingAuthor(false);
+  };
+
+  /* ── Sidebar Notes Editor ── */
+  const notesEditorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (notesEditorRef.current) {
+      if (notesEditorRef.current.getAttribute('data-article-id') !== article.id) {
+        notesEditorRef.current.innerHTML = markdownToHtml(article.notes || '');
+        notesEditorRef.current.setAttribute('data-article-id', article.id);
+      }
+    }
+  }, [article.id]);
+
+  const handleNotesInput = () => {
+    if (notesEditorRef.current) {
+      const html = notesEditorRef.current.innerHTML;
+      const markdown = htmlToMarkdown(html);
+      onUpdate({
+        ...article,
+        notes: markdown
+      });
+    }
+  };
+
+  const applyFormatting = (formatType: 'bold' | 'italic' | 'underline') => {
+    if (!notesEditorRef.current) return;
+    notesEditorRef.current.focus();
+    document.execCommand(formatType, false);
+    handleNotesInput();
+  };
+
+  const handleNotesPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+    handleNotesInput();
+  };
+
+  const handleNotesKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === ' ') {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+      const node = range.startContainer;
+      const textContent = node.textContent || '';
+      const offset = range.startOffset;
+
+      if (offset === 1 && (textContent.trim() === '-' || textContent.trim() === '*')) {
+        e.preventDefault();
+        document.execCommand('delete', false);
+        document.execCommand('insertUnorderedList', false);
+        handleNotesInput();
+      }
+    }
   };
 
   /* ── Tag management ── */
@@ -709,15 +765,57 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
 
           {/* Notes */}
           <div className="sidebar-section" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <div style={{ marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <span className="sidebar-label" style={{ marginBottom: 0 }}>02. NOTES</span>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button 
+                  className="toolbar-btn" 
+                  onClick={() => applyFormatting('bold')} 
+                  title="Bold (Cmd+B)"
+                  style={{ padding: '2px 6px', border: '1px solid var(--border)', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--muted)' }}
+                >
+                  <Bold size={11} />
+                </button>
+                <button 
+                  className="toolbar-btn" 
+                  onClick={() => applyFormatting('italic')} 
+                  title="Italic (Cmd+I)"
+                  style={{ padding: '2px 6px', border: '1px solid var(--border)', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--muted)' }}
+                >
+                  <Italic size={11} />
+                </button>
+                <button 
+                  className="toolbar-btn" 
+                  onClick={() => applyFormatting('underline')} 
+                  title="Underline (Cmd+U)"
+                  style={{ padding: '2px 6px', border: '1px solid var(--border)', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--muted)' }}
+                >
+                  <Underline size={11} />
+                </button>
+              </div>
             </div>
-            <textarea
+            <div
+              ref={notesEditorRef}
+              contentEditable={true}
               className="notes-textarea"
-              style={{ flex: 1, minHeight: '120px', resize: 'none' }}
+              style={{ 
+                flex: 1, 
+                minHeight: '120px', 
+                overflowY: 'auto', 
+                outline: 'none', 
+                border: '1px solid var(--border)', 
+                padding: '10px 12px',
+                background: 'var(--surface)',
+                fontFamily: 'var(--sans)',
+                fontSize: '15px',
+                lineHeight: '1.6',
+                color: 'var(--ink)'
+              }}
               placeholder="Your notes on this article…"
-              value={article.notes}
-              onChange={(e) => onUpdate({ ...article, notes: e.target.value })}
+              onInput={handleNotesInput}
+              onPaste={handleNotesPaste}
+              onKeyDown={handleNotesKeyDown}
+              suppressContentEditableWarning
             />
           </div>
 

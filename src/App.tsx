@@ -382,7 +382,7 @@ export default function App() {
   const addNotebookNote = async (title?: string, content?: string) => {
     const newNote: NotebookNote = {
       id: crypto.randomUUID(),
-      title: title || 'UNTITLED NOTE',
+      title: title || 'Untitled note',
       content: content || '',
       createdAt: Date.now(),
       updatedAt: Date.now(),
