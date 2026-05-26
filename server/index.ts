@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { scrapeAndProcess, processPDFBuffer } from './scraper.js';
-import { existsSync } from 'fs';
+import { existsSync, writeFileSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import * as cheerio from 'cheerio';
@@ -11,6 +11,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+app.use('/api/uploads', express.static(join(process.cwd(), 'uploads')));
 
 app.post('/api/scrape', async (req, res) => {
   const { url } = req.body as { url?: string };
@@ -48,7 +49,16 @@ app.post('/api/upload-pdf', async (req, res) => {
   try {
     const base64Data = file.split(';base64,').pop() || '';
     const buffer = Buffer.from(base64Data, 'base64');
-    const article = await processPDFBuffer(buffer, name);
+
+    // Save uploaded PDF file to workspace uploads directory
+    const uploadsDir = join(process.cwd(), 'uploads');
+    if (!existsSync(uploadsDir)) {
+      mkdirSync(uploadsDir, { recursive: true });
+    }
+    const filePath = join(uploadsDir, name);
+    writeFileSync(filePath, buffer);
+
+    const article = await processPDFBuffer(buffer, name, `/api/uploads/${encodeURIComponent(name)}`);
     res.json(article);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

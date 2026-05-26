@@ -522,54 +522,57 @@ function cleanPDFText(text: string): string {
   // 2. Extract footnotes
   const { cleanedPages, footnotes } = extractAndCleanFootnotes(withoutHeaders);
   
-  // Join the cleaned pages together for standard paragraph/line joining
-  const cleanedPagesText = cleanedPages.join('\n\n');
-  const lines = cleanedPagesText.split(/\r?\n/);
-  const cleanedLines: string[] = [];
+  // 3. Process each page individually to preserve page boundaries
+  const processedPages = cleanedPages.map((pageText) => {
+    const lines = pageText.split(/\r?\n/);
+    const cleanedLines: string[] = [];
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) {
-      cleanedLines.push('');
-      continue;
-    }
-    const normalized = line.replace(/\s+/g, ' ');
-    cleanedLines.push(normalized);
-  }
-
-  let processedText = '';
-  let currentParagraph = '';
-
-  for (const line of cleanedLines) {
-    if (line === '') {
-      if (currentParagraph) {
-        processedText += currentParagraph + '\n\n';
-        currentParagraph = '';
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) {
+        cleanedLines.push('');
+        continue;
       }
-    } else {
-      if (currentParagraph) {
-        if (currentParagraph.endsWith('-')) {
-          currentParagraph = currentParagraph.slice(0, -1) + line;
-        } else {
-          currentParagraph += ' ' + line;
+      const normalized = line.replace(/\s+/g, ' ');
+      cleanedLines.push(normalized);
+    }
+
+    let processedText = '';
+    let currentParagraph = '';
+
+    for (const line of cleanedLines) {
+      if (line === '') {
+        if (currentParagraph) {
+          processedText += currentParagraph + '\n\n';
+          currentParagraph = '';
         }
       } else {
-        currentParagraph = line;
+        if (currentParagraph) {
+          if (currentParagraph.endsWith('-')) {
+            currentParagraph = currentParagraph.slice(0, -1) + line;
+          } else {
+            currentParagraph += ' ' + line;
+          }
+        } else {
+          currentParagraph = line;
+        }
       }
     }
-  }
 
-  if (currentParagraph) {
-    processedText += currentParagraph;
-  }
+    if (currentParagraph) {
+      processedText += currentParagraph;
+    }
 
-  let finalContent = processedText.replace(/\n{3,}/g, '\n\n').trim();
+    return processedText.replace(/\n{3,}/g, '\n\n').trim();
+  }).filter(Boolean);
+
+  let finalContent = processedPages.join('\n\n---\n\n');
 
   if (footnotes.length > 0) {
     const formattedFootnotes = footnotes
       .map(fn => fn.replace(/^\[(.+?)\]/, '**$1.**'))
       .join('\n\n');
-    finalContent += '\n\n## Footnotes\n\n' + formattedFootnotes;
+    finalContent += '\n\n---\n\n## Footnotes\n\n' + formattedFootnotes;
   }
 
   return finalContent;
