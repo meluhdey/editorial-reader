@@ -256,8 +256,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [pdfViewMode, setPdfViewMode] = useState<'text' | 'original'>('text');
-  const [pdfColumns, setPdfColumns] = useState<1 | 2>(2);
+  const [pdfColumns, setPdfColumns] = useState<1 | 2>(1);
 
   const isPdfArticle = article.tags.includes('pdf');
 
@@ -416,161 +415,177 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
       <div 
         className="reader-left" 
         style={{ 
-          padding: isPdfArticle && pdfViewMode === 'original' ? 0 : undefined,
           display: isPdfArticle ? 'flex' : undefined,
           flexDirection: isPdfArticle ? 'column' : undefined
         }}
       >
         {isPdfArticle && (
-          <div className="pdf-tab-bar">
-            <div className="pdf-tab-group">
-              <button 
-                className={`pdf-tab-btn ${pdfViewMode === 'text' ? 'pdf-tab-btn--active' : ''}`}
-                onClick={() => setPdfViewMode('text')}
-              >
-                ✦ TEXT READER (ANNOTATABLE) ✦
-              </button>
-              <button 
-                className={`pdf-tab-btn ${pdfViewMode === 'original' ? 'pdf-tab-btn--active' : ''}`}
-                onClick={() => setPdfViewMode('original')}
-              >
-                ✦ ORIGINAL DOCUMENT (READ-ONLY) ✦
-              </button>
-            </div>
-
-            {pdfViewMode === 'text' && (
-              <div className="pdf-layout-controls">
-                <button 
-                  className={`pdf-layout-btn ${pdfColumns === 1 ? 'active' : ''}`}
-                  onClick={() => setPdfColumns(1)}
-                  title="Single Column Layout"
-                >
-                  1 COLUMN
-                </button>
-                <button 
-                  className={`pdf-layout-btn ${pdfColumns === 2 ? 'active' : ''}`}
-                  onClick={() => setPdfColumns(2)}
-                  title="Two Column Academic Layout"
-                >
-                  2 COLUMNS
-                </button>
+          <div className="pdf-reader-toolbar">
+            <div className="pdf-column-switch-container">
+              <span className="pdf-column-switch-label">LAYOUT MODES</span>
+              <div className="pdf-column-switch" onClick={() => setPdfColumns(c => c === 1 ? 2 : 1)}>
+                <div className={`pdf-column-switch-slider position-${pdfColumns}`} />
+                <span className={`pdf-column-switch-option ${pdfColumns === 1 ? 'active' : ''}`}>1 COLUMN</span>
+                <span className={`pdf-column-switch-option ${pdfColumns === 2 ? 'active' : ''}`}>2 COLUMNS</span>
               </div>
-            )}
+            </div>
           </div>
         )}
 
-        {isPdfArticle && pdfViewMode === 'original' ? (
-          <div className="reader-pdf-iframe-container">
-            <iframe
-              src={article.url.startsWith('local-upload://') ? article.url.replace('local-upload://', '/api/uploads/') : article.url}
-              className="reader-pdf-iframe"
-              title={article.title}
-            />
-          </div>
-        ) : (
-          <>
-            {isPdfArticle && pdfViewMode === 'text' ? (
-              <div className="pdf-viewer-workspace" onMouseUp={handleMouseUp} onClick={handleContentClick}>
-                {pdfPages.map((pageText, idx) => (
-                  <div key={idx} className={`pdf-page-sim-sheet ${pdfColumns === 2 ? 'pdf-page--two-columns' : ''}`}>
-                    <div className="pdf-page-header">
-                      <span>{article.title}</span>
-                      <span className="pdf-page-num">PAGE {idx + 1} OF {pdfPages.length}</span>
+        {isPdfArticle ? (
+          <div className="pdf-viewer-workspace" onMouseUp={handleMouseUp} onClick={handleContentClick}>
+            {pdfPages.map((pageText, idx) => {
+              const parts = pageText.split('<!-- FOOTNOTES -->');
+              const bodyText = parts[0];
+              const footnoteText = parts[1];
+
+              return (
+                <div key={idx} className={`pdf-page-sim-sheet ${pdfColumns === 2 ? 'pdf-page--two-columns' : ''}`}>
+                  <div className="pdf-page-header">
+                    <span>{article.title}</span>
+                    <span className="pdf-page-num">PAGE {idx + 1} OF {pdfPages.length}</span>
+                  </div>
+
+                  {idx === 0 && (
+                    <div className="pdf-page-title-block">
+                      <h1 className="pdf-page-main-title">
+                        {editingTitle ? (
+                          <input
+                            className="reader-article-title-input"
+                            value={titleDraft}
+                            autoFocus
+                            onChange={(e) => setTitleDraft(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitleDraft(article.title); setEditingTitle(false); } }}
+                            onBlur={saveTitle}
+                          />
+                        ) : (
+                          <span className="reader-editable" onClick={() => { setTitleDraft(article.title); setEditingTitle(true); }}>
+                            {article.title}
+                          </span>
+                        )}
+                      </h1>
+                      <div className="pdf-page-main-author">
+                        {editingAuthor ? (
+                          <input
+                            className="reader-article-author-input"
+                            value={authorDraft}
+                            autoFocus
+                            placeholder="Add author…"
+                            onChange={(e) => setAuthorDraft(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveAuthor(); if (e.key === 'Escape') { setAuthorDraft(article.author ?? ''); setEditingAuthor(false); } }}
+                            onBlur={saveAuthor}
+                          />
+                        ) : (
+                          <span className="reader-editable" onClick={() => { setAuthorDraft(article.author ?? ''); setEditingAuthor(true); }}>
+                            {article.author || <span className="reader-editable-placeholder">Add author…</span>}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div 
-                      className="article-content"
-                      style={{ fontSize: FONT_SIZES[fontIdx], margin: 0, padding: 0 }}
-                    >
+                  )}
+
+                  <div 
+                    className="article-content"
+                    style={{ fontSize: FONT_SIZES[fontIdx], margin: 0, padding: 0 }}
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                      {applyHighlights(bodyText, article.highlights)}
+                    </ReactMarkdown>
+                  </div>
+
+                  {footnoteText && (
+                    <div className="pdf-page-footnotes">
+                      <div className="pdf-page-footnotes-line" />
                       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                        {applyHighlights(pageText, article.highlights)}
+                        {applyHighlights(footnoteText.trim(), article.highlights)}
                       </ReactMarkdown>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <>
-                <img
-                  className="reader-article-img"
-                  src={getReaderImageUrl(article)}
-                  alt=""
-                  onError={(e) => {
-                    const target = e.currentTarget;
-                    const fallback = fallbackPaintings[hashId(article.id) % fallbackPaintings.length];
-                    if (target.src !== fallback) {
-                      target.src = fallback;
-                    }
-                  }}
-                />
-
-                <div className="reader-article-header">
-                  <h1 className="reader-article-title">
-                    {editingTitle ? (
-                      <input
-                        className="reader-article-title-input"
-                        value={titleDraft}
-                        autoFocus
-                        onChange={(e) => setTitleDraft(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitleDraft(article.title); setEditingTitle(false); } }}
-                        onBlur={saveTitle}
-                      />
-                    ) : (
-                      <span className="reader-editable" onClick={() => { setTitleDraft(article.title); setEditingTitle(true); }}>
-                        {article.title}
-                      </span>
-                    )}
-                  </h1>
-                  <div className="reader-article-author">
-                    {editingAuthor ? (
-                      <input
-                        className="reader-article-author-input"
-                        value={authorDraft}
-                        autoFocus
-                        placeholder="Add author…"
-                        onChange={(e) => setAuthorDraft(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') saveAuthor(); if (e.key === 'Escape') { setAuthorDraft(article.author ?? ''); setEditingAuthor(false); } }}
-                        onBlur={saveAuthor}
-                      />
-                    ) : (
-                      <span className="reader-editable" onClick={() => { setAuthorDraft(article.author ?? ''); setEditingAuthor(true); }}>
-                        {article.author || <span className="reader-editable-placeholder">Add author…</span>}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="reader-article-meta">
-                    <span>{formatDate(article.savedAt)}</span>
-                    <span>—</span>
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="source-link"
-                    >
-                      {hostname(article.url)}
-                      <ExternalLink size={9} strokeWidth={1.5} />
-                    </a>
-                  </div>
-
-                  {article.tags.length > 0 && (
-                    <div className="reader-tags-inline">
-                      {article.tags.join(' / ')}
                     </div>
                   )}
                 </div>
+              );
+            })}
+          </div>
+        ) : (
+          <>
+            <img
+              className="reader-article-img"
+              src={getReaderImageUrl(article)}
+              alt=""
+              onError={(e) => {
+                const target = e.currentTarget;
+                const fallback = fallbackPaintings[hashId(article.id) % fallbackPaintings.length];
+                if (target.src !== fallback) {
+                  target.src = fallback;
+                }
+              }}
+            />
 
-                <div
-                  className="article-content"
-                  style={{ fontSize: FONT_SIZES[fontIdx] }}
-                  onMouseUp={handleMouseUp}
-                  onClick={handleContentClick}
+            <div className="reader-article-header">
+              <h1 className="reader-article-title">
+                {editingTitle ? (
+                  <input
+                    className="reader-article-title-input"
+                    value={titleDraft}
+                    autoFocus
+                    onChange={(e) => setTitleDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitleDraft(article.title); setEditingTitle(false); } }}
+                    onBlur={saveTitle}
+                  />
+                ) : (
+                  <span className="reader-editable" onClick={() => { setTitleDraft(article.title); setEditingTitle(true); }}>
+                    {article.title}
+                  </span>
+                )}
+              </h1>
+              <div className="reader-article-author">
+                {editingAuthor ? (
+                  <input
+                    className="reader-article-author-input"
+                    value={authorDraft}
+                    autoFocus
+                    placeholder="Add author…"
+                    onChange={(e) => setAuthorDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveAuthor(); if (e.key === 'Escape') { setAuthorDraft(article.author ?? ''); setEditingAuthor(false); } }}
+                    onBlur={saveAuthor}
+                  />
+                ) : (
+                  <span className="reader-editable" onClick={() => { setAuthorDraft(article.author ?? ''); setEditingAuthor(true); }}>
+                    {article.author || <span className="reader-editable-placeholder">Add author…</span>}
+                  </span>
+                )}
+              </div>
+
+              <div className="reader-article-meta">
+                <span>{formatDate(article.savedAt)}</span>
+                <span>—</span>
+                <a
+                  href={article.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="source-link"
                 >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                    {processedContent}
-                  </ReactMarkdown>
+                  {hostname(article.url)}
+                  <ExternalLink size={9} strokeWidth={1.5} />
+                </a>
+              </div>
+
+              {article.tags.length > 0 && (
+                <div className="reader-tags-inline">
+                  {article.tags.join(' / ')}
                 </div>
-              </>
-            )}
+              )}
+            </div>
+
+            <div
+              className="article-content"
+              style={{ fontSize: FONT_SIZES[fontIdx] }}
+              onMouseUp={handleMouseUp}
+              onClick={handleContentClick}
+            >
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                {processedContent}
+              </ReactMarkdown>
+            </div>
           </>
         )}
       </div>
@@ -693,12 +708,13 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
           </div>
 
           {/* Notes */}
-          <div className="sidebar-section">
+          <div className="sidebar-section" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div style={{ marginBottom: '12px' }}>
               <span className="sidebar-label" style={{ marginBottom: 0 }}>02. NOTES</span>
             </div>
             <textarea
               className="notes-textarea"
+              style={{ flex: 1, minHeight: '120px', resize: 'none' }}
               placeholder="Your notes on this article…"
               value={article.notes}
               onChange={(e) => onUpdate({ ...article, notes: e.target.value })}
@@ -706,7 +722,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
           </div>
 
           {/* Highlights */}
-          <div className="sidebar-section" style={{ flex: 1 }}>
+          <div className="sidebar-section" style={{ display: 'flex', flexDirection: 'column', height: '320px', minHeight: 0 }}>
             <div style={{ marginBottom: '12px' }}>
               <span className="sidebar-label" style={{ marginBottom: 0 }}>
                 03. HIGHLIGHTS
@@ -719,7 +735,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
                 Select any text in the article to save a highlight.
               </p>
             ) : (
-              <div className="hl-list">
+              <div className="hl-list" style={{ overflowY: 'auto', flex: 1, scrollbarWidth: 'thin' }}>
                 <AnimatePresence>
                   {article.highlights.map((h) => (
                     <motion.div 

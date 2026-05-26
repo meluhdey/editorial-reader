@@ -3901,38 +3901,15 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   width: 100%;
 }
 
-.pdf-tab-bar {
+.pdf-reader-toolbar {
   display: flex;
-  background: var(--border);
-  border-bottom: 1px solid var(--border);
-  z-index: 10;
-}
-
-.pdf-tab-btn {
-  flex: 1;
-  padding: 12px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  border: none;
+  align-items: center;
+  justify-content: space-between;
   background: var(--bg);
-  cursor: pointer;
-  color: var(--muted);
-  text-align: center;
-  transition: all 0.15s ease;
-  border-right: 1px solid var(--border);
-}
-.pdf-tab-btn:last-child {
-  border-right: none;
-}
-.pdf-tab-btn:hover {
-  color: var(--ink);
-  background: rgba(0,0,0,0.02);
-}
-.pdf-tab-btn.pdf-tab-btn--active {
-  color: var(--bg);
-  background: var(--ink);
-  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 24px;
+  z-index: 10;
+  box-sizing: border-box;
 }
 
 .pdf-viewer-workspace {
@@ -3995,37 +3972,71 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   display: block;
 }
 
-/* Dynamic academic layouts and multi-column settings */
-.pdf-layout-controls {
+/* Premium Sliding Switch Toggle for Layout Columns */
+.pdf-column-switch-container {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 16px;
-  background: var(--bg);
-  border-left: 1px solid var(--border);
+  gap: 12px;
 }
 
-.pdf-layout-btn {
+.pdf-column-switch-label {
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 0.05em;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  background: transparent;
+  font-weight: 500;
+  letter-spacing: 0.08em;
   color: var(--muted);
+  text-transform: uppercase;
+}
+
+.pdf-column-switch {
+  position: relative;
+  display: flex;
+  width: 176px;
+  height: 24px;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid var(--border);
+  padding: 1px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  user-select: none;
+  box-sizing: border-box;
 }
 
-.pdf-layout-btn:hover {
-  color: var(--ink);
-  border-color: var(--muted);
-}
-
-.pdf-layout-btn.active {
+.pdf-column-switch-slider {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: calc(50% - 1px);
   background: var(--ink);
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pdf-column-switch-slider.position-1 {
+  left: 1px;
+}
+
+.pdf-column-switch-slider.position-2 {
+  left: calc(50%);
+}
+
+.pdf-column-switch-option {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 20px;
+  transition: color 0.2s ease;
+}
+
+.pdf-column-switch-option.active {
   color: var(--bg);
-  border-color: var(--ink);
+}
+
+.pdf-column-switch-option:not(.active) {
+  color: var(--muted);
 }
 
 /* Two-column typography layout splits */
@@ -4057,5 +4068,114 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 .pdf-page-sim-sheet.pdf-page--two-columns .article-content p:first-of-type {
   text-indent: 0;
 }
+
+/* ─── PDF Typesetting Polish: title blocks, abstracts, page footnotes ─── */
+
+.pdf-page-title-block {
+  column-span: all;
+  text-align: left;
+  margin-bottom: 40px;
+  padding-bottom: 24px;
+  border-bottom: 1.5px double var(--border);
+}
+
+.pdf-page-title-block input {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  line-height: inherit !important;
+  letter-spacing: inherit !important;
+  color: inherit !important;
+  text-transform: inherit !important;
+  text-align: inherit !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+}
+
+.pdf-page-main-title {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ink);
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.pdf-page-main-author {
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* Simulated academic abstract block spanning both columns */
+.pdf-page-sim-sheet .pdf-abstract {
+  column-span: all;
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.6;
+  font-style: italic;
+  margin-top: 0;
+  margin-bottom: 36px;
+  padding: 24px 32px;
+  background: rgba(0,0,0,0.015);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Page-specific bottom-aligned footnotes spanning both columns */
+.pdf-page-footnotes {
+  column-span: all;
+  margin-top: 40px;
+  padding-top: 20px;
+  box-sizing: border-box;
+}
+
+.pdf-page-footnotes-line {
+  width: 120px;
+  height: 1px;
+  background: var(--border);
+  margin-bottom: 16px;
+}
+
+.pdf-page-footnotes p {
+  font-family: var(--serif) !important;
+  font-size: 12px !important;
+  line-height: 1.55 !important;
+  color: var(--muted) !important;
+  margin-bottom: 8px !important;
+  text-indent: 0 !important; /* Footnotes do not inherit paragraph indents */
+  text-align: left !important;
+}
+
+/* Premium Academic Typography: Baseline-protecting superscripts & subscripts */
+.article-content sup,
+.article-content sub,
+.pdf-page-footnotes sup,
+.pdf-page-footnotes sub {
+  font-size: 72%;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+
+.article-content sup,
+.pdf-page-footnotes sup {
+  top: -0.45em;
+  font-weight: 500;
+}
+
+.article-content sub,
+.pdf-page-footnotes sub {
+  bottom: -0.2em;
+}
+
 
 

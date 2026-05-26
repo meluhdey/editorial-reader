@@ -317,8 +317,8 @@ function buildFallbackSvg(): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
-function extractAndCleanFootnotes(pagesRaw: string[]): { cleanedPages: string[]; footnotes: string[] } {
-  const globalFootnotes: string[] = [];
+function extractAndCleanFootnotes(pagesRaw: string[]): { cleanedPages: string[]; pageFootnotes: string[][] } {
+  const pageFootnotesList: string[][] = [];
   const cleanedPages: string[] = [];
 
   for (let pageIdx = 0; pageIdx < pagesRaw.length; pageIdx++) {
@@ -404,11 +404,11 @@ function extractAndCleanFootnotes(pagesRaw: string[]): { cleanedPages: string[];
       pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
     }
 
-    globalFootnotes.push(...pageFootnotes);
+    pageFootnotesList.push(pageFootnotes);
     cleanedPages.push(bodyLines.join('\n'));
   }
 
-  return { cleanedPages, footnotes: globalFootnotes };
+  return { cleanedPages, pageFootnotes: pageFootnotesList };
 }
 
 function cleanAndRemoveHeadersFooters(pagesRaw: string[]): string[] {
@@ -511,6 +511,79 @@ function cleanAndRemoveHeadersFooters(pagesRaw: string[]): string[] {
   return cleanedPages;
 }
 
+function formatSuperscriptSubscript(text: string, fnKeys: string[] = []): string {
+  if (!text) return text;
+
+  // 1. Convert Unicode superscripts and subscripts to HTML tags
+  const superMap: Record<string, string> = {
+    '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+    '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')', 'ⁿ': 'n', 'ⁱ': 'i', 'ᵃ': 'a', 'ᵇ': 'b', 'ᶜ': 'c',
+    'ᵈ': 'd', 'ᵉ': 'e', 'ᶠ': 'f', 'ᵍ': 'g', 'ʰ': 'h', 'ʲ': 'j', 'ᵏ': 'k', 'ˡ': 'l', 'ᵐ': 'm', 'ᵒ': 'o',
+    'ᵖ': 'p', 'ʳ': 'r', 'ˢ': 's', 'ᵗ': 't', 'ᵘ': 'u', 'ᵛ': 'v', 'ʷ': 'w', 'ˣ': 'x', 'ʸ': 'y', 'ᶻ': 'z'
+  };
+
+  const subMap: Record<string, string> = {
+    '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
+    '₊': '+', '₋': '-', '₌': '=', '₍': '(', '₎': ')', 'ₐ': 'a', 'ₑ': 'e', 'ₒ': 'o', 'ₓ': 'x', 'ₕ': 'h',
+    'ₖ': 'k', 'ₗ': 'l', 'ₘ': 'm', 'ₙ': 'n', 'ₚ': 'p', 'ₛ': 's', 'ₜ': 't'
+  };
+
+  const superRegex = new RegExp(`([${Object.keys(superMap).join('')}]+)`, 'g');
+  const subRegex = new RegExp(`([${Object.keys(subMap).join('')}]+)`, 'g');
+
+  let processed = text.replace(superRegex, (match) => {
+    const converted = match.split('').map(char => superMap[char] || char).join('');
+    return `<sup>${converted}</sup>`;
+  });
+
+  processed = processed.replace(subRegex, (match) => {
+    const converted = match.split('').map(char => subMap[char] || char).join('');
+    return `<sub>${converted}</sub>`;
+  });
+
+  // 2. Identify word-attached footnote citation numbers: e.g. "subjectivity2" -> "subjectivity<sup>2</sup>"
+  processed = processed.replace(/\b([a-zA-Z]{2,})(\d+)\b/g, '$1<sup>$2</sup>');
+
+  // 3. Identify punctuation-attached footnote citation numbers: e.g. "well.1" -> "well.<sup>1</sup>", "2024).2" -> "2024).<sup>2</sup>"
+  // Using lookbehind so it doesn't match standard decimal points like "3.14" or "0.05"
+  processed = processed.replace(/(?<!\d)([.,;:!?'"\]\)]+)(\d+)\b/g, '$1<sup>$2</sup>');
+
+  // 4. Convert isolated footnote symbols (like †, ‡, §) attached to words or sentences to superscript
+  processed = processed.replace(/(\w+)\s*(†|‡|§)/g, '$1<sup>$2</sup>');
+
+  // 5. Render typical subscript notation in chemical formulas (like H2O, CO2)
+  processed = processed.replace(/\b([A-Z][a-z]?)(\d+)([A-Z][a-z]?)\b/g, '$1<sub>$2</sub>$3');
+  processed = processed.replace(/\b([A-Z][a-z]?O?)(\d+)\b/g, '$1<sub>$2</sub>');
+
+  // 6. Dynamic Footnote Citation Replacements matching active footnote keys for the page
+  // e.g. "denial 13" -> "denial<sup>13</sup>", "failing [13]" -> "failing<sup>13</sup>"
+  for (const key of fnKeys) {
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    // Pattern A: Word/Punctuation + Space(s) + key
+    // We ignore if the preceding word is a citation exclusion word (like "page", "chapter", "volume", "figure", "table")
+    const regexSpace = new RegExp(`(\\b\\w+[.,;:!?'"\\]\\)]*)\\s+(${escapedKey})\\b`, 'gi');
+    processed = processed.replace(regexSpace, (match, p1, p2) => {
+      const wordOnly = p1.replace(/[.,;:!?'"\]\)]/g, '').toLowerCase();
+      const excludeWords = ['page', 'pg', 'chapter', 'ch', 'section', 'sec', 'volume', 'vol', 'figure', 'fig', 'table', 'tbl', 'version', 'v', 'level', 'step', 'class', 'grade', 'group'];
+      if (excludeWords.includes(wordOnly)) {
+        return match; // Return unchanged (e.g. "page 13")
+      }
+      return `${p1}<sup>${p2}</sup>`;
+    });
+
+    // Pattern B: Word/Punctuation + Optional Space(s) + [key] or (key)
+    // e.g. "denial [13]" -> "denial<sup>13</sup>" or "denial[13]" -> "denial<sup>13</sup>"
+    const regexBracket = new RegExp(`(\\b\\w+[.,;:!?'"\\]\\)]*)\\s*\\[(${escapedKey})\\]`, 'g');
+    processed = processed.replace(regexBracket, '$1<sup>$2</sup>');
+    
+    const regexParen = new RegExp(`(\\b\\w+[.,;:!?'"\\]\\)]*)\\s*\\((${escapedKey})\\)`, 'g');
+    processed = processed.replace(regexParen, '$1<sup>$2</sup>');
+  }
+
+  return processed;
+}
+
 function cleanPDFText(text: string): string {
   if (!text) return '';
 
@@ -520,10 +593,17 @@ function cleanPDFText(text: string): string {
   const withoutHeaders = cleanAndRemoveHeadersFooters(pagesRaw);
   
   // 2. Extract footnotes
-  const { cleanedPages, footnotes } = extractAndCleanFootnotes(withoutHeaders);
+  const { cleanedPages, pageFootnotes } = extractAndCleanFootnotes(withoutHeaders);
   
   // 3. Process each page individually to preserve page boundaries
-  const processedPages = cleanedPages.map((pageText) => {
+  const processedPages = cleanedPages.map((pageText, idx) => {
+    // Extract page-specific active footnote keys (e.g., ["13", "14"])
+    const fns = pageFootnotes[idx] || [];
+    const fnKeys = fns.map(fn => {
+      const m = fn.match(/^\[(.+?)\]/);
+      return m ? m[1] : null;
+    }).filter(Boolean) as string[];
+
     const lines = pageText.split(/\r?\n/);
     const cleanedLines: string[] = [];
 
@@ -540,12 +620,23 @@ function cleanPDFText(text: string): string {
     let processedText = '';
     let currentParagraph = '';
 
+    const commitParagraph = () => {
+      if (!currentParagraph) return;
+      
+      const formatted = formatSuperscriptSubscript(currentParagraph, fnKeys);
+      
+      // Abstract detection: if a paragraph starts with Abstract or Summary, wrap in class styling block
+      if (/^\s*(?:abstract|summary)\b[—:\-\.\s]/i.test(formatted)) {
+        processedText += `<div class="pdf-abstract">\n\n${formatted}\n\n</div>\n\n`;
+      } else {
+        processedText += formatted + '\n\n';
+      }
+      currentParagraph = '';
+    };
+
     for (const line of cleanedLines) {
       if (line === '') {
-        if (currentParagraph) {
-          processedText += currentParagraph + '\n\n';
-          currentParagraph = '';
-        }
+        commitParagraph();
       } else {
         if (currentParagraph) {
           if (currentParagraph.endsWith('-')) {
@@ -559,23 +650,23 @@ function cleanPDFText(text: string): string {
       }
     }
 
-    if (currentParagraph) {
-      processedText += currentParagraph;
+    commitParagraph();
+
+    let pageBody = processedText.replace(/\n{3,}/g, '\n\n').trim();
+
+    // Append this specific page's footnotes, if present
+    const fnsList = pageFootnotes[idx];
+    if (fnsList && fnsList.length > 0) {
+      const formattedFns = fnsList
+        .map(fn => formatSuperscriptSubscript(fn.replace(/^\[(.+?)\]/, '**$1.**'), fnKeys))
+        .join('\n\n');
+      pageBody += '\n\n<!-- FOOTNOTES -->\n\n' + formattedFns;
     }
 
-    return processedText.replace(/\n{3,}/g, '\n\n').trim();
+    return pageBody;
   }).filter(Boolean);
 
-  let finalContent = processedPages.join('\n\n---\n\n');
-
-  if (footnotes.length > 0) {
-    const formattedFootnotes = footnotes
-      .map(fn => fn.replace(/^\[(.+?)\]/, '**$1.**'))
-      .join('\n\n');
-    finalContent += '\n\n---\n\n## Footnotes\n\n' + formattedFootnotes;
-  }
-
-  return finalContent;
+  return processedPages.join('\n\n---\n\n');
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
