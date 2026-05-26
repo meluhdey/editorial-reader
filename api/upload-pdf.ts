@@ -1,3 +1,4 @@
+import './polyfill.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { processPDFBuffer } from '../server/scraper.js';
 import { existsSync, writeFileSync, mkdirSync } from 'fs';

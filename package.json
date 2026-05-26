@@ -2,6 +2,9 @@
   "name": "editorial-reader",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "concurrently -n server,client -c cyan,magenta \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "vite",
