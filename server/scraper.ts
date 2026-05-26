@@ -22,6 +22,20 @@ async function loadPdfjs(): Promise<PdfjsModule> {
         const require = createRequire(import.meta.url);
         proc.getBuiltinModule = (name: string) => require(name);
       }
+
+      // pdfjs uses bare `new DOMMatrix()` / `globalThis.DOMMatrix`. In Node it
+      // normally pulls these from @napi-rs/canvas via its own internal require,
+      // but esbuild bundling on Vercel breaks that dynamic require, leaving the
+      // globals unset -> "DOMMatrix is not defined". So we import the canvas
+      // backend ourselves and assign the globals before pdfjs initialises.
+      const g = globalThis as unknown as Record<string, unknown>;
+      if (typeof g.DOMMatrix !== 'function') {
+        const canvas = await import('@napi-rs/canvas');
+        if (canvas.DOMMatrix) g.DOMMatrix = canvas.DOMMatrix;
+        if (canvas.Path2D) g.Path2D = canvas.Path2D;
+        if (canvas.ImageData) g.ImageData = canvas.ImageData;
+      }
+
       return import('pdfjs-dist/legacy/build/pdf.mjs');
     })();
   }
