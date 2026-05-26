@@ -50,13 +50,17 @@ app.post('/api/upload-pdf', async (req, res) => {
     const base64Data = file.split(';base64,').pop() || '';
     const buffer = Buffer.from(base64Data, 'base64');
 
-    // Save uploaded PDF file to workspace uploads directory
-    const uploadsDir = join(process.cwd(), 'uploads');
-    if (!existsSync(uploadsDir)) {
-      mkdirSync(uploadsDir, { recursive: true });
+    // Save uploaded PDF file to workspace uploads directory if the filesystem permits
+    try {
+      const uploadsDir = join(process.cwd(), 'uploads');
+      if (!existsSync(uploadsDir)) {
+        mkdirSync(uploadsDir, { recursive: true });
+      }
+      const filePath = join(uploadsDir, name);
+      writeFileSync(filePath, buffer);
+    } catch (fsErr) {
+      console.warn('[FS Warning] Could not save physical PDF locally (running in serverless/read-only environment):', fsErr);
     }
-    const filePath = join(uploadsDir, name);
-    writeFileSync(filePath, buffer);
 
     const article = await processPDFBuffer(buffer, name, `/api/uploads/${encodeURIComponent(name)}`);
     res.json(article);
