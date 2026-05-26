@@ -4,8 +4,8 @@ import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-const GOOGLEBOT_UA =
-  'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+const CHROME_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const td = new TurndownService({
   headingStyle: 'atx',
@@ -41,7 +41,7 @@ td.addRule('images', {
 async function fetchResource(url: string): Promise<Response> {
   const res = await fetch(url, {
     headers: {
-      'User-Agent': GOOGLEBOT_UA,
+      'User-Agent': CHROME_UA,
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.9',
       'Cache-Control': 'no-cache',
