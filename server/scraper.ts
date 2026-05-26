@@ -2,7 +2,31 @@ import * as cheerio from 'cheerio';
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
-import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
+
+// ── Lazy PDF.js loader (serverless-safe) ─────────────────────────────────────
+// pdfjs-dist v5 relies on process.getBuiltinModule(), which only exists in
+// Node 22.3+/20.16+. On older lambda runtimes it's missing, so we polyfill it
+// IMMEDIATELY before importing pdfjs. Loading lazily (a) guarantees the polyfill
+// runs first regardless of bundler ordering, (b) keeps pdfjs out of the article-
+// scrape code path entirely, and (c) keeps any load failure inside the caller's
+// try/catch so it surfaces as a real 500 message instead of a hard crash.
+type PdfjsModule = typeof import('pdfjs-dist/legacy/build/pdf.mjs');
+let pdfjsPromise: Promise<PdfjsModule> | null = null;
+
+async function loadPdfjs(): Promise<PdfjsModule> {
+  if (!pdfjsPromise) {
+    pdfjsPromise = (async () => {
+      const proc = process as unknown as { getBuiltinModule?: (n: string) => unknown };
+      if (typeof proc.getBuiltinModule !== 'function') {
+        const { createRequire } = await import('module');
+        const require = createRequire(import.meta.url);
+        proc.getBuiltinModule = (name: string) => require(name);
+      }
+      return import('pdfjs-dist/legacy/build/pdf.mjs');
+    })();
+  }
+  return pdfjsPromise;
+}
 
 const CHROME_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -772,6 +796,7 @@ function extractTitleAndAuthorFromFirstPage(rawText: string, filename: string): 
 }
 
 export async function processPDFBuffer(buffer: Buffer | ArrayBuffer, filename: string, sourceUrl?: string) {
+  const pdfjs = await loadPdfjs();
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(buffer),
     useSystemFonts: true,
