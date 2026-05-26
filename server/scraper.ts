@@ -676,14 +676,24 @@ function cleanPDFText(text: string): string {
       if (line === '') {
         commitParagraph();
       } else {
-        if (currentParagraph) {
-          if (currentParagraph.endsWith('-')) {
-            currentParagraph = currentParagraph.slice(0, -1) + line;
-          } else {
-            currentParagraph += ' ' + line;
-          }
-        } else {
+        // Force heading lines and metadata lines to be separate paragraphs
+        const isHeading = /^\d+(\.\d+)*\.?\s+[A-Z]/.test(line);
+        const isMetadata = /^(keywords|how to cite|copyright|©)/i.test(line);
+        
+        if (isHeading || isMetadata) {
+          commitParagraph();
           currentParagraph = line;
+          commitParagraph();
+        } else {
+          if (currentParagraph) {
+            if (currentParagraph.endsWith('-')) {
+              currentParagraph = currentParagraph.slice(0, -1) + line;
+            } else {
+              currentParagraph += ' ' + line;
+            }
+          } else {
+            currentParagraph = line;
+          }
         }
       }
     }
@@ -824,9 +834,34 @@ export async function processPDFBuffer(buffer: Buffer | ArrayBuffer, filename: s
   for (let i = 1; i <= pdfDocument.numPages; i++) {
     const page = await pdfDocument.getPage(i);
     const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item: any) => item.str)
-      .join(' ');
+    
+    // Group items by y-coordinate (with a threshold of 2.0 units) to reconstruct lines and preserve layout/breaks
+    const linesMap: { y: number; items: any[] }[] = [];
+    for (const item of textContent.items as any[]) {
+      const text = item.str;
+      if (text === undefined) continue;
+      
+      const x = item.transform[4];
+      const y = item.transform[5];
+      
+      let foundLine = linesMap.find(line => Math.abs(line.y - y) < 2.0);
+      if (!foundLine) {
+        foundLine = { y, items: [] };
+        linesMap.push(foundLine);
+      }
+      foundLine.items.push({ text, x });
+    }
+
+    // Sort lines by y coordinate descending (top-to-bottom)
+    linesMap.sort((a, b) => b.y - a.y);
+
+    // Sort items left-to-right on each line and join them
+    const pageLines = linesMap.map(line => {
+      line.items.sort((a, b) => a.x - b.x);
+      return line.items.map(item => item.text).join('').replace(/\s+/g, ' ').trim();
+    }).filter(Boolean);
+
+    const pageText = pageLines.join('\n');
     rawText += pageText + `\n-- ${i} of ${pdfDocument.numPages} --\n`;
   }
 
