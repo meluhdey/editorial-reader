@@ -94,8 +94,20 @@ export default function Spotlight({ open, onClose, onAdd, onOpen }: SpotlightPro
             }),
           });
           setStage('extracting');
+          
+          if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            let errorMsg = 'Could not parse uploaded PDF';
+            try {
+              const parsed = JSON.parse(text);
+              errorMsg = parsed.error ?? errorMsg;
+            } catch {
+              errorMsg = `Server error (${res.status}): ${text.substring(0, 150) || res.statusText}`;
+            }
+            throw new Error(errorMsg);
+          }
+          
           const data = await res.json();
-          if (!res.ok) throw new Error(data.error ?? 'Could not parse uploaded PDF');
           const article = data as Article;
           onAdd(article);
           setStage('done');
