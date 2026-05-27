@@ -109,9 +109,40 @@ interface Popup {
   text: string;
 }
 
+const entitiesMap: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&apos;': "'",
+  '&#39;': "'",
+  '&#x27;': "'",
+  '&#8217;': "'",
+  '&#x2019;': "'",
+  '&rsquo;': "'",
+  '&lsquo;': "'",
+  '&rdquo;': '"',
+  '&ldquo;': '"',
+  '&nbsp;': ' ',
+};
+
+function decodeNumericEntity(entity: string): string | null {
+  try {
+    if (entity.startsWith('&#x') || entity.startsWith('&#X')) {
+      const hex = entity.slice(3, -1);
+      return String.fromCharCode(parseInt(hex, 16));
+    } else if (entity.startsWith('&#')) {
+      const dec = entity.slice(2, -1);
+      return String.fromCharCode(parseInt(dec, 10));
+    }
+  } catch {}
+  return null;
+}
+
 function buildCleanTextAndMap(markdown: string) {
   let cleanText = '';
   const map: number[] = []; // cleanIndex -> rawIndex
+  const skippedRanges: { start: number; end: number }[] = [];
 
   let i = 0;
   const len = markdown.length;
@@ -127,6 +158,7 @@ function buildCleanTextAndMap(markdown: string) {
         }
       }
       if (closeTag !== -1) {
+        skippedRanges.push({ start: i, end: closeTag + 1 });
         i = closeTag + 1;
         continue;
       }
@@ -135,21 +167,25 @@ function buildCleanTextAndMap(markdown: string) {
     // 2. Skip bold/italic/strikethrough syntax
     // ** or __ (bold)
     if ((markdown[i] === '*' && markdown[i + 1] === '*') || (markdown[i] === '_' && markdown[i + 1] === '_')) {
+      skippedRanges.push({ start: i, end: i + 2 });
       i += 2;
       continue;
     }
     // ~~ (strikethrough)
     if (markdown[i] === '~' && markdown[i + 1] === '~') {
+      skippedRanges.push({ start: i, end: i + 2 });
       i += 2;
       continue;
     }
     // * or _ (italic)
     if (markdown[i] === '*' || markdown[i] === '_') {
+      skippedRanges.push({ start: i, end: i + 1 });
       i += 1;
       continue;
     }
     // ` (inline code)
     if (markdown[i] === '`') {
+      skippedRanges.push({ start: i, end: i + 1 });
       i += 1;
       continue;
     }
@@ -177,6 +213,7 @@ function buildCleanTextAndMap(markdown: string) {
           }
         }
         if (closeParen !== -1) {
+          skippedRanges.push({ start: i, end: i + 1 }); // skipped [
           i += 1;
           continue;
         }
@@ -192,8 +229,33 @@ function buildCleanTextAndMap(markdown: string) {
         }
       }
       if (closeParen !== -1) {
+        skippedRanges.push({ start: i, end: closeParen + 1 }); // skipped ](url)
         i = closeParen + 1;
         continue;
+      }
+    }
+
+    // 4. Decode HTML Entities so selection matches exactly
+    if (markdown[i] === '&') {
+      let closeSemicolon = -1;
+      for (let j = i + 1; j < Math.min(len, i + 12); j++) {
+        if (markdown[j] === ';') {
+          closeSemicolon = j;
+          break;
+        }
+      }
+      if (closeSemicolon !== -1) {
+        const entity = markdown.slice(i, closeSemicolon + 1);
+        let decoded = entitiesMap[entity.toLowerCase()] || entitiesMap[entity] || null;
+        if (decoded === null && (entity.startsWith('&#') || entity.startsWith('&#x') || entity.startsWith('&#X'))) {
+          decoded = decodeNumericEntity(entity);
+        }
+        if (decoded !== null) {
+          map.push(i);
+          cleanText += decoded;
+          i = closeSemicolon + 1;
+          continue;
+        }
       }
     }
 
@@ -203,14 +265,14 @@ function buildCleanTextAndMap(markdown: string) {
   }
 
   map.push(len);
-  return { cleanText, map };
+  return { cleanText, map, skippedRanges };
 }
 
 function applyHighlights(markdown: string, highlights: Highlight[]): string {
   if (highlights.length === 0) return markdown;
 
-  // 1. Build clean text and map
-  const { cleanText, map } = buildCleanTextAndMap(markdown);
+  // 1. Build clean text, map, and skipped ranges
+  const { cleanText, map, skippedRanges } = buildCleanTextAndMap(markdown);
   
   interface MatchRange {
     start: number;
@@ -231,17 +293,30 @@ function applyHighlights(markdown: string, highlights: Highlight[]): string {
   // 2. Find matches on clean text
   for (const h of uniqueHighlights) {
     try {
+      // Escape special characters for RegExp
       const escaped = h.text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const flexWhitespace = escaped.replace(/\s+/g, '\\s+');
+      // Normalize spaces to support any whitespace
+      let flexPattern = escaped.replace(/\s+/g, '\\s+');
+      // Support matching both typographic and straight single/double quotes/apostrophes
+      flexPattern = flexPattern
+        .replace(/['’\u2018\u2019]/g, "['’\u2018\u2019]")
+        .replace(/["”\u201C\u201D]/g, '["”\u201C\u201D]')
+        .replace(/[-—–]/g, '[-—–]');
       
-      // Enforce word boundaries for alphanumeric starts/ends to prevent false-positive substring matches (e.g. "in" in "incest")
+      // A. Try scanning with word boundaries first (highly performant and prevents substring false-positives)
+      let matchFound = false;
       const startWordBound = /^\w/.test(h.text.trim()) ? '\\b' : '';
       const endWordBound = /\w$/.test(h.text.trim()) ? '\\b' : '';
-      const pattern = `${startWordBound}${flexWhitespace}${endWordBound}`;
-      const regex = new RegExp(pattern, 'gi');
+      const pattern = `${startWordBound}${flexPattern}${endWordBound}`;
+      let regex = new RegExp(pattern, 'gi');
       
       let match;
       while ((match = regex.exec(cleanText)) !== null) {
+        if (match[0].length === 0) {
+          regex.lastIndex++;
+          continue;
+        }
+        matchFound = true;
         const cleanStart = match.index;
         const cleanEnd = match.index + match[0].length;
         
@@ -255,6 +330,30 @@ function applyHighlights(markdown: string, highlights: Highlight[]): string {
           color: h.color,
           id: h.id,
         });
+      }
+
+      // B. Self-Healing Fallback: If no match was found (e.g., due to custom punctuation, markdown blocks,
+      // or hidden Unicode characters breaking \b boundaries), retry searching for the exact text without \b
+      if (!matchFound) {
+        regex = new RegExp(flexPattern, 'gi');
+        while ((match = regex.exec(cleanText)) !== null) {
+          if (match[0].length === 0) {
+            regex.lastIndex++;
+            continue;
+          }
+          const cleanStart = match.index;
+          const cleanEnd = match.index + match[0].length;
+          
+          const rawStart = map[cleanStart];
+          const rawEnd = map[cleanEnd];
+
+          matches.push({
+            start: rawStart,
+            end: rawEnd,
+            color: h.color,
+            id: h.id,
+          });
+        }
       }
     } catch (e) {
       console.error('[highlight regex error]', e);
@@ -277,6 +376,10 @@ function applyHighlights(markdown: string, highlights: Highlight[]): string {
     boundariesSet.add(m.start);
     boundariesSet.add(m.end);
   }
+  for (const r of skippedRanges) {
+    boundariesSet.add(r.start);
+    boundariesSet.add(r.end);
+  }
   const boundaries = Array.from(boundariesSet).sort((a, b) => a - b);
 
   // 4. Rebuild the document segment by segment
@@ -287,19 +390,25 @@ function applyHighlights(markdown: string, highlights: Highlight[]): string {
     const segmentText = markdown.slice(start, end);
     if (!segmentText) continue;
 
-    // Find all matches covering this segment
-    const covering = uniqueMatches.filter(m => m.start <= start && m.end >= end);
-    
-    if (covering.length > 0) {
-      // Collect unique colors/styles
-      const colors = Array.from(new Set(covering.map(m => m.color)));
-      const ids = covering.map(m => m.id).join(',');
-      const classes = colors.map(c => `hl-${c}`).join(' ');
+    // Check if this segment is inside a skipped range
+    const isSkipped = skippedRanges.some(r => r.start <= start && r.end >= end);
+
+    if (!isSkipped) {
+      // Find all matches covering this segment
+      const covering = uniqueMatches.filter(m => m.start <= start && m.end >= end);
       
-      result += `<mark class="${classes}" data-hid="${ids}">${segmentText}</mark>`;
-    } else {
-      result += segmentText;
+      if (covering.length > 0) {
+        // Collect unique colors/styles
+        const colors = Array.from(new Set(covering.map(m => m.color)));
+        const ids = covering.map(m => m.id).join(',');
+        const classes = colors.map(c => `hl-${c}`).join(' ');
+        
+        result += `<mark class="${classes}" data-hid="${ids}">${segmentText}</mark>`;
+        continue;
+      }
     }
+
+    result += segmentText;
   }
 
   return result;
