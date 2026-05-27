@@ -167,7 +167,22 @@ function buildCleanTextAndMap(markdown: string) {
   let i = 0;
   const len = markdown.length;
 
+  // CommonMark backslash-escapable ASCII punctuation. Turndown emits these (e.g. \[ \]
+  // \* \. \( \) ) when scraping prose, but they render WITHOUT the backslash — so the
+  // user's on-screen selection never contains it. We must strip the backslash here too,
+  // otherwise highlights spanning escaped punctuation (e.g. "[. . .]") never match.
+  const ESCAPABLE = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+
   while (i < len) {
+    // 0. Backslash escapes: \X renders as literal X. Emit X (mapped to the backslash's
+    //    raw position so the two-char \X stays atomic and renders correctly when wrapped).
+    if (markdown[i] === '\\' && i + 1 < len && ESCAPABLE.includes(markdown[i + 1])) {
+      map.push(i);
+      cleanText += markdown[i + 1];
+      i += 2;
+      continue;
+    }
+
     // 1. Skip HTML tags: <...tag...>
     if (markdown[i] === '<') {
       let closeTag = -1;
