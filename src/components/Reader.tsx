@@ -49,8 +49,18 @@ function cleanContentImages(content: string, headerUrl: string | undefined): str
     }
   };
 
+  const getFilename = (url: string) => {
+    try {
+      const path = url.split('?')[0];
+      const parts = path.split('/');
+      return parts[parts.length - 1] || '';
+    } catch {
+      return '';
+    }
+  };
+
   const cleanHeader = getCleanUrl(headerUrl);
-  if (!cleanHeader) return content;
+  const headerFilename = getFilename(headerUrl);
 
   const mdImageRegex = /!\[.*?\]\((.*?)\)/g;
   const htmlImageRegex = /<img\s+[^>]*?src=["'](.*?)["'][^>]*?>/gi;
@@ -61,9 +71,23 @@ function cleanContentImages(content: string, headerUrl: string | undefined): str
 
   if (allImages.length === 0) return content;
 
+  // RULE A: If there is exactly one image inside the body content, and we have a banner,
+  // we omit it from the body of text because it is already used in the banner cover!
+  if (allImages.length === 1) {
+    return content.replace(allImages[0].raw, '');
+  }
+
+  // RULE B: If there are multiple images, we strip any image that duplicates the banner
+  // either by direct URL match OR by filename match.
   let nextContent = content;
   for (const img of allImages) {
-    if (getCleanUrl(img.url) === cleanHeader) {
+    const cleanImgUrl = getCleanUrl(img.url);
+    const imgFilename = getFilename(img.url);
+    
+    const isDirectMatch = cleanImgUrl === cleanHeader;
+    const isFilenameMatch = headerFilename && imgFilename && imgFilename === headerFilename;
+
+    if (isDirectMatch || isFilenameMatch) {
       nextContent = nextContent.replace(img.raw, '');
     }
   }
