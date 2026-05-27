@@ -139,6 +139,26 @@ function decodeNumericEntity(entity: string): string | null {
   return null;
 }
 
+// Find the ')' that closes a markdown link destination beginning at the '(' (openIdx).
+// Honors backslash escapes (e.g. \( \) in Wikipedia URLs) and balanced parens, so URLs
+// containing apostrophes, quotes, or parenthesised disambiguators don't terminate early.
+// A naive "first ')'" scan leaks the URL/title into the clean text and breaks the index
+// map, which silently drops highlights that span links — worst in long, link-heavy articles.
+function findLinkClose(md: string, openIdx: number): number {
+  let k = openIdx + 1;
+  let depth = 1;
+  const len = md.length;
+  while (k < len) {
+    const c = md[k];
+    if (c === '\\') { k += 2; continue; }          // escaped char
+    if (c === '(') { depth++; k++; continue; }
+    if (c === ')') { depth--; if (depth === 0) return k; k++; continue; }
+    if (c === '\n') { return -1; }                 // links never span lines
+    k++;
+  }
+  return -1;
+}
+
 function buildCleanTextAndMap(markdown: string) {
   let cleanText = '';
   const map: number[] = []; // cleanIndex -> rawIndex
@@ -205,13 +225,7 @@ function buildCleanTextAndMap(markdown: string) {
         }
       }
       if (closeBracket !== -1 && markdown[closeBracket + 1] === '(') {
-        let closeParen = -1;
-        for (let k = closeBracket + 2; k < len; k++) {
-          if (markdown[k] === ')') {
-            closeParen = k;
-            break;
-          }
-        }
+        const closeParen = findLinkClose(markdown, closeBracket + 1);
         if (closeParen !== -1) {
           skippedRanges.push({ start: i, end: i + 1 }); // skipped [
           i += 1;
@@ -221,13 +235,7 @@ function buildCleanTextAndMap(markdown: string) {
     }
 
     if (markdown[i] === ']' && markdown[i + 1] === '(') {
-      let closeParen = -1;
-      for (let k = i + 2; k < len; k++) {
-        if (markdown[k] === ')') {
-          closeParen = k;
-          break;
-        }
-      }
+      const closeParen = findLinkClose(markdown, i + 1);
       if (closeParen !== -1) {
         skippedRanges.push({ start: i, end: closeParen + 1 }); // skipped ](url)
         i = closeParen + 1;
