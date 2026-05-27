@@ -37,6 +37,40 @@ function getReaderImageUrl(article: Article): string {
   return url;
 }
 
+function cleanContentImages(content: string, headerUrl: string | undefined): string {
+  if (!headerUrl) return content;
+  
+  const getCleanUrl = (url: string) => {
+    try {
+      const u = new URL(url);
+      return (u.hostname + u.pathname).replace(/\/$/, '');
+    } catch {
+      return url.replace(/^(https?:)?\/\//i, '').replace(/\/$/, '');
+    }
+  };
+
+  const cleanHeader = getCleanUrl(headerUrl);
+  if (!cleanHeader) return content;
+
+  const mdImageRegex = /!\[.*?\]\((.*?)\)/g;
+  const htmlImageRegex = /<img\s+[^>]*?src=["'](.*?)["'][^>]*?>/gi;
+
+  const mdImages = [...content.matchAll(mdImageRegex)].map(m => ({ raw: m[0], url: m[1] }));
+  const htmlImages = [...content.matchAll(htmlImageRegex)].map(m => ({ raw: m[0], url: m[1] }));
+  const allImages = [...mdImages, ...htmlImages];
+
+  if (allImages.length === 0) return content;
+
+  let nextContent = content;
+  for (const img of allImages) {
+    if (getCleanUrl(img.url) === cleanHeader) {
+      nextContent = nextContent.replace(img.raw, '');
+    }
+  }
+
+  return nextContent;
+}
+
 interface ReaderProps {
   article: Article;
   onUpdate: (article: Article) => void;
@@ -459,7 +493,11 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
     if (target.tagName !== 'MARK' && !window.getSelection()?.toString()) setPopup(null);
   };
 
-  const processedContent = applyHighlights(article.content, article.highlights);
+  const cleanBodyContent = useMemo(() => {
+    return cleanContentImages(article.content, article.headerImageUrl);
+  }, [article.content, article.headerImageUrl]);
+
+  const processedContent = applyHighlights(cleanBodyContent, article.highlights);
 
   return (
     <div 
@@ -714,7 +752,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
 
           {/* Font size */}
           <div className="sidebar-section sidebar-section--font">
-            <span className="sidebar-label">00. TEXT SIZE</span>
+            <span className="sidebar-label">TEXT SIZE</span>
             <div className="font-size-controls">
               <button
                 className="font-size-btn"
@@ -732,7 +770,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
 
           {/* Topics */}
           <div className="sidebar-section">
-            <span className="sidebar-label">01. TOPICS AND THEMES</span>
+            <span className="sidebar-label">TOPICS AND THEMES</span>
             <div className="tag-chip-list">
               <AnimatePresence>
                 {article.tags.map((tag) => (
@@ -766,7 +804,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
           {/* Notes */}
           <div className="sidebar-section" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <span className="sidebar-label" style={{ marginBottom: 0 }}>02. NOTES</span>
+              <span className="sidebar-label" style={{ marginBottom: 0 }}>NOTES</span>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <button 
                   className="toolbar-btn" 
@@ -823,7 +861,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
           <div className="sidebar-section" style={{ display: 'flex', flexDirection: 'column', height: '320px', minHeight: 0 }}>
             <div style={{ marginBottom: '12px' }}>
               <span className="sidebar-label" style={{ marginBottom: 0 }}>
-                03. HIGHLIGHTS
+                HIGHLIGHTS
                 {article.highlights.length > 0 && ` (${article.highlights.length})`}
               </span>
             </div>

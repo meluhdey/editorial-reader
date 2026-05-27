@@ -851,6 +851,20 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 }
 .notes-textarea::placeholder { color: var(--faint); }
 
+.notes-textarea ul,
+.notes-textarea ol,
+.notebook-editor-editable ul,
+.notebook-editor-editable ol {
+  padding-left: 20px !important;
+  margin-bottom: 1em;
+}
+
+.notes-textarea li,
+.notebook-editor-editable li {
+  margin-bottom: 0.25em;
+  list-style-position: outside !important;
+}
+
 /* Tag editing */
 .tag-chip-list { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; min-height: 6px; }
 
