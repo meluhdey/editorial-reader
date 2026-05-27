@@ -220,13 +220,25 @@ function applyHighlights(markdown: string, highlights: Highlight[]): string {
   }
   
   const matches: MatchRange[] = [];
+
+  // Group highlights by unique lowercase text + color to prevent duplicate RegExp scanning
+  const uniqueHighlights = Array.from(
+    new Map(
+      highlights.map((h) => [`${h.text.trim().toLowerCase()}-${h.color}`, h])
+    ).values()
+  );
   
   // 2. Find matches on clean text
-  for (const h of highlights) {
+  for (const h of uniqueHighlights) {
     try {
       const escaped = h.text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const flexWhitespace = escaped.replace(/\s+/g, '\\s+');
-      const regex = new RegExp(flexWhitespace, 'gi');
+      
+      // Enforce word boundaries for alphanumeric starts/ends to prevent false-positive substring matches (e.g. "in" in "incest")
+      const startWordBound = /^\w/.test(h.text.trim()) ? '\\b' : '';
+      const endWordBound = /\w$/.test(h.text.trim()) ? '\\b' : '';
+      const pattern = `${startWordBound}${flexWhitespace}${endWordBound}`;
+      const regex = new RegExp(pattern, 'gi');
       
       let match;
       while ((match = regex.exec(cleanText)) !== null) {
@@ -249,11 +261,19 @@ function applyHighlights(markdown: string, highlights: Highlight[]): string {
     }
   }
 
-  if (matches.length === 0) return markdown;
+  // De-duplicate matches by start, end, and color to prevent overlapping DOM splits
+  const uniqueMatchesMap = new Map<string, MatchRange>();
+  for (const m of matches) {
+    const key = `${m.start}-${m.end}-${m.color}`;
+    uniqueMatchesMap.set(key, m);
+  }
+  const uniqueMatches = Array.from(uniqueMatchesMap.values());
+
+  if (uniqueMatches.length === 0) return markdown;
 
   // 3. Collect all boundary offsets
   const boundariesSet = new Set<number>([0, markdown.length]);
-  for (const m of matches) {
+  for (const m of uniqueMatches) {
     boundariesSet.add(m.start);
     boundariesSet.add(m.end);
   }
@@ -268,7 +288,7 @@ function applyHighlights(markdown: string, highlights: Highlight[]): string {
     if (!segmentText) continue;
 
     // Find all matches covering this segment
-    const covering = matches.filter(m => m.start <= start && m.end >= end);
+    const covering = uniqueMatches.filter(m => m.start <= start && m.end >= end);
     
     if (covering.length > 0) {
       // Collect unique colors/styles
