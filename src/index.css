@@ -855,14 +855,14 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 .notes-textarea ol,
 .notebook-editor-editable ul,
 .notebook-editor-editable ol {
-  padding-left: 20px !important;
+  padding-left: 10px !important;
   margin-bottom: 1em;
 }
 
 .notes-textarea li,
 .notebook-editor-editable li {
   margin-bottom: 0.25em;
-  list-style-position: outside !important;
+  list-style-position: inside !important;
 }
 
 /* Tag editing */

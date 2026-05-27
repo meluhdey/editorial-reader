@@ -275,9 +275,14 @@ function extractTags(html: string): string[] {
 // ── Content extraction ─────────────────────────────────────────────────────
 
 function extractContent(html: string, pageUrl: string): string {
+  // Pre-clean raw HTML of scripts, styles, and stylesheets to prevent DOM layout/style pollution
+  const $clean = cheerio.load(html);
+  $clean('script, style, noscript, iframe, link[rel="stylesheet"]').remove();
+  const cleanedHtml = $clean.html();
+
   // Stage 1: Mozilla Readability (best quality)
   try {
-    const dom = new JSDOM(html, { url: pageUrl });
+    const dom = new JSDOM(cleanedHtml, { url: pageUrl });
     const reader = new Readability(dom.window.document, {
       charThreshold: 100,
     });
