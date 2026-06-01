@@ -67,12 +67,14 @@ export default function Notebook({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editorMode, setEditorMode] = useState<'edit' | 'preview'>('edit');
   const editorRef = useRef<HTMLDivElement>(null);
+  const [isDirty, setIsDirty] = useState(false);
 
   // Update drafts when active note changes or editor mode changes
   useEffect(() => {
     if (activeNote) {
       setTitleDraft(activeNote.title);
       setIsEditingTitle(false);
+      setIsDirty(false);
       // Sync editorRef innerHTML only if the note ID has changed or if it's a different note in DOM
       if (editorRef.current) {
         if (editorRef.current.getAttribute('data-note-id') !== activeNote.id) {
@@ -82,6 +84,7 @@ export default function Notebook({
       }
     } else {
       setTitleDraft('');
+      setIsDirty(false);
       if (editorRef.current) {
         editorRef.current.innerHTML = '';
         editorRef.current.removeAttribute('data-note-id');
@@ -89,16 +92,45 @@ export default function Notebook({
     }
   }, [selectedNoteId, activeNote?.id, editorMode]);
 
+  const activeNoteRef = useRef(activeNote);
+  const onUpdateNoteRef = useRef(onUpdateNote);
+  const isDirtyRef = useRef(isDirty);
+
+  useEffect(() => {
+    activeNoteRef.current = activeNote;
+    onUpdateNoteRef.current = onUpdateNote;
+    isDirtyRef.current = isDirty;
+  }, [activeNote, onUpdateNote, isDirty]);
+
+  // Navigate off / Tab switch / Unmount auto-save
+  useEffect(() => {
+    return () => {
+      if (isDirtyRef.current && activeNoteRef.current && editorRef.current) {
+        const html = editorRef.current.innerHTML;
+        const markdown = htmlToMarkdown(html);
+        onUpdateNoteRef.current({
+          ...activeNoteRef.current,
+          content: markdown,
+          updatedAt: Date.now()
+        });
+      }
+    };
+  }, [selectedNoteId]);
+
+  const saveNote = () => {
+    if (!activeNote || !editorRef.current) return;
+    const html = editorRef.current.innerHTML;
+    const markdown = htmlToMarkdown(html);
+    onUpdateNote({
+      ...activeNote,
+      content: markdown,
+      updatedAt: Date.now()
+    });
+    setIsDirty(false);
+  };
+
   const handleEditableInput = () => {
-    if (editorRef.current && activeNote) {
-      const html = editorRef.current.innerHTML;
-      const markdown = htmlToMarkdown(html);
-      onUpdateNote({
-        ...activeNote,
-        content: markdown,
-        updatedAt: Date.now()
-      });
-    }
+    setIsDirty(true);
   };
 
   const saveTitle = () => {
@@ -363,7 +395,7 @@ export default function Notebook({
       {/* ── LEFT SIDEBAR ── */}
       <div className="notebook-sidebar">
         <div className="notebook-sidebar-header">
-          <span className="notebook-sidebar-title">00. WORKSPACE</span>
+          <span className="notebook-sidebar-title">WORKSPACE</span>
           <div className="notebook-sidebar-tabs">
             <button 
               className={`notebook-sidebar-tab ${subTab === 'notes' ? 'active' : ''}`}
@@ -523,6 +555,13 @@ export default function Notebook({
 
                   <div className="notebook-writer-actions">
                     <button 
+                      className={`btn-curator-toggle save-note-btn ${isDirty ? 'dirty' : ''}`}
+                      onClick={saveNote}
+                      title="Save note changes"
+                    >
+                      {isDirty ? 'SAVE' : 'SAVED'}
+                    </button>
+                    <button 
                       className={`btn-curator-toggle ${isDrawerOpen ? 'active' : ''}`}
                       onClick={() => setIsDrawerOpen(prev => !prev)}
                       title="Toggle Curation Drawer"
@@ -619,7 +658,7 @@ export default function Notebook({
               {isDrawerOpen && (
                 <div className="notebook-curator-drawer">
                   <div className="drawer-header">
-                    <span className="drawer-title">✦ INSIGHTS DOCK</span>
+                    <span className="drawer-title">INSIGHTS DOCK</span>
                     <button className="drawer-close" onClick={() => setIsDrawerOpen(false)}>
                       <X size={14} />
                     </button>
@@ -841,9 +880,6 @@ export default function Notebook({
                       <div className={`insight-card-bar ${ins.color || 'bold'}`} />
                       
                       <div className="insight-card-header">
-                        <span className="insight-card-type">
-                          {ins.type === 'note' ? 'ARTICLE SUMMARY NOTE' : `${ins.color?.toUpperCase()} HIGHLIGHT Selection`}
-                        </span>
                         <span className="insight-card-date">{formatDate(ins.createdAt)}</span>
                       </div>
 

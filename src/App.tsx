@@ -212,6 +212,23 @@ export default function App() {
     }
   }, [state, user]);
 
+  // Synchronize document title with the user name dynamically
+  useEffect(() => {
+    let titleText = "Melody's footnotes";
+    if (user) {
+      const firstName = user.user_metadata?.first_name;
+      if (firstName) {
+        titleText = `${firstName.trim()}'s footnotes`;
+      } else if (user.email) {
+        const emailPrefix = user.email.split('@')[0];
+        titleText = `${emailPrefix}'s footnotes`;
+      }
+    } else {
+      titleText = "Melody's footnotes";
+    }
+    document.title = titleText;
+  }, [user]);
+
   // ⌘K / Ctrl+K opens spotlight
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -559,6 +576,7 @@ export default function App() {
                 onAdd={addArticle}
                 onSelect={(id) => navigate('reader', id)}
                 onDelete={deleteArticle}
+                onUpdate={updateArticle}
               />
             </motion.div>
           )}

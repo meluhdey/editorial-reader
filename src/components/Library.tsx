@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { RotateCw } from 'lucide-react';
 import type { Article } from '../types';
 
 interface LibraryProps {
@@ -7,6 +8,7 @@ interface LibraryProps {
   onAdd: (article: Article) => void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onUpdate?: (article: Article) => void;
 }
 
 function formatDate(ts: number): string {
@@ -61,7 +63,7 @@ function getCardImageUrl(article: Article): string {
   return url;
 }
 
-export default function Library({ articles, onSelect, onDelete }: LibraryProps) {
+export default function Library({ articles, onSelect, onDelete, onUpdate }: LibraryProps) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [activeSource, setActiveSource] = useState<string | null>(null);
@@ -240,7 +242,25 @@ export default function Library({ articles, onSelect, onDelete }: LibraryProps) 
                   </div>
                 )}
 
-                {/* Delete on hover */}
+                {/* Delete and Randomise banner on hover */}
+                {article.tags && article.tags.includes('pdf') && onUpdate && (
+                  <button
+                    className="lib-card-refresh"
+                    title="Randomise banner image"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const currentUrl = article.headerImageUrl;
+                      const available = fallbackPaintings.filter((p) => p !== currentUrl);
+                      const randomUrl = available[Math.floor(Math.random() * available.length)];
+                      onUpdate({
+                        ...article,
+                        headerImageUrl: randomUrl,
+                      });
+                    }}
+                  >
+                    <RotateCw size={13} />
+                  </button>
+                )}
                 <button
                   className="lib-card-delete"
                   onClick={(e) => { e.stopPropagation(); onDelete(article.id); }}

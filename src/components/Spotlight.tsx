@@ -203,7 +203,7 @@ export default function Spotlight({ open, onClose, onAdd, onOpen }: SpotlightPro
                       onChange={handleFileUpload}
                       style={{ display: 'none' }}
                     />
-                    <span>✦ UPLOAD .PDF FILE ✦</span>
+                    <span>UPLOAD .PDF FILE</span>
                   </label>
                 </div>
               )}

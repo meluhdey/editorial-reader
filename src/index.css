@@ -180,7 +180,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
 }
 
 .navbar-tab-close:hover {
-  color: #000;
+  color: var(--ink);
   transform: scale(1.3) !important;
 }
 
@@ -418,6 +418,26 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
 .lib-card-delete:hover { background: var(--ink); color: var(--bg); }
 .lib-card-img-wrap:has(.lib-card-img--placeholder) .lib-card-delete { color: var(--ink); }
 
+.lib-card-refresh {
+  position: absolute;
+  top: 10px;
+  right: 36px;
+  color: var(--bg);
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lib-card:hover .lib-card-refresh { opacity: 1; }
+.lib-card-refresh:hover { background: var(--ink); color: var(--bg); }
+.lib-card-img-wrap:has(.lib-card-img--placeholder) .lib-card-refresh { color: var(--ink); }
+
 .lib-card-meta {
   padding: 14px 18px 18px;
   display: flex;
@@ -533,7 +553,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
   transition: color 0.15s;
 }
 .reader-editable:hover {
-  color: #333333;
+  color: var(--ink);
 }
 .reader-editable-placeholder {
   color: var(--faint);
@@ -546,7 +566,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
   font-weight: 400;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  color: #333333;
+  color: var(--ink);
   background: none;
   border: none;
   outline: none;
@@ -556,7 +576,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
   font-family: var(--sans);
   font-size: 15px;
   font-weight: 600;
-  color: #333333;
+  color: var(--ink);
   background: none;
   border: none;
   outline: none;
@@ -927,19 +947,26 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--border);
   cursor: pointer;
-  transition: color 0.12s, background 0.12s;
+  transition: all 0.15s ease;
 }
 .tag-add-btn:hover {
-  color: var(--ink);
-  background: var(--bg);
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 
 /* Highlights list */
-.hl-list { display: flex; flex-direction: column; gap: 12px; }
+.hl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
 
 .hl-item {
   padding: 12px 14px;
@@ -1171,17 +1198,18 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--border);
   padding: 3px 8px;
   flex-shrink: 0;
   cursor: pointer;
-  transition: color 0.12s, background 0.12s;
+  transition: all 0.15s ease;
 }
 .spotlight-hint:hover {
-  color: var(--ink);
-  background: var(--bg);
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 
 .spotlight-status {
@@ -1237,18 +1265,18 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.14em;
-  color: var(--muted);
+  color: var(--ink);
   cursor: pointer;
   padding: 6px 16px;
   border: 1px solid var(--border);
-  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+  transition: all 0.15s ease;
   user-select: none;
 }
 
 .spotlight-upload-label:hover {
-  color: var(--ink);
+  background: var(--ink);
+  color: var(--bg);
   border-color: var(--ink);
-  background: var(--bg);
 }
 
 /* ─── PASTE VIEW ─────────────────────────────────────────────────────────── */
@@ -1373,17 +1401,19 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   font-size: 12px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--bg);
-  background: var(--ink);
-  border: 1px solid var(--ink);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
   padding: 10px 20px;
   cursor: pointer;
-  transition: opacity 0.2s ease, background 0.2s ease;
+  transition: all 0.15s ease;
   border-radius: 0;
 }
 
 .paste-submit:hover:not(:disabled) {
-  opacity: 0.8;
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 
 .paste-submit:disabled {
@@ -1392,8 +1422,9 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 }
 
 .paste-submit--done {
-  background: var(--muted);
-  border-color: var(--muted);
+  background: var(--bg);
+  color: var(--ink);
+  border-color: var(--ink);
 }
 
 /* ─── INDEX GRAPH ────────────────────────────────────────────────────────── */
@@ -1443,8 +1474,11 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 /* Toggle buttons */
 .index-toggle {
   display: flex;
-  gap: 0;
+  background: rgba(107, 107, 107, 0.04);
+  border: 1px solid var(--border);
+  padding: 2px;
   align-self: flex-end;
+  gap: 0;
 }
 
 .index-toggle-btn {
@@ -1452,27 +1486,22 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink);
+  color: var(--muted);
   background: transparent;
-  border: 1px solid var(--border);
+  border: none;
   padding: 6px 14px;
   cursor: pointer;
   border-radius: 0;
-  transition: background 0.15s, color 0.15s;
-}
-
-.index-toggle-btn + .index-toggle-btn {
-  margin-left: -1px;
+  transition: all 0.2s ease;
 }
 
 .index-toggle-btn:hover:not(.index-toggle-btn--active) {
-  background: rgba(107,107,107,0.07);
+  color: var(--ink);
 }
 
 .index-toggle-btn--active {
   background: var(--ink);
   color: var(--bg);
-  border-color: var(--ink);
   z-index: 1;
 }
 
@@ -1672,7 +1701,7 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 
 .notebook-sidebar-tabs {
   display: flex;
-  background: var(--bg);
+  background: rgba(107, 107, 107, 0.04);
   padding: 2px;
   border: 1px solid var(--border);
 }
@@ -1682,23 +1711,24 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.1em;
-  border: 1px solid transparent;
+  border: none;
   background: transparent;
   color: var(--muted);
   padding: 6px 0;
   cursor: pointer;
   transition: all 0.15s ease;
   font-weight: 400 !important;
+  text-transform: uppercase;
 }
 
-.notebook-sidebar-tab:hover {
+.notebook-sidebar-tab:hover:not(.active) {
   color: var(--ink);
 }
 
 .notebook-sidebar-tab.active {
-  background: var(--bg);
-  color: var(--ink);
-  border: 1px solid var(--border);
+  background: var(--ink);
+  color: var(--bg);
+  border: none;
   box-shadow: none;
   font-weight: 400 !important;
 }
@@ -1765,19 +1795,21 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--bg);
-  background: var(--ink);
-  border: 1px solid var(--ink);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
   padding: 10px 0;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .notebook-create-btn:hover {
-  opacity: 0.85;
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 
 .notebook-notes-list {
@@ -2002,11 +2034,13 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 }
 
 .btn-curator-toggle:hover {
+  background: var(--ink);
+  color: var(--bg);
   border-color: var(--ink);
 }
 
 .btn-curator-toggle.active {
-  background: rgba(107, 107, 107, 0.08);
+  background: var(--bg);
   color: var(--ink);
   border-color: var(--ink);
 }
@@ -2389,7 +2423,7 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   font-size: 11px;
   letter-spacing: 0.16em;
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .drawer-close {
@@ -2606,18 +2640,20 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--bg);
-  background: var(--ink);
-  border: 1px solid var(--ink);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
   padding: 8px 16px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  transition: opacity 0.12s;
+  transition: all 0.15s ease;
 }
 
 .notebook-dashboard-create-btn:hover {
-  opacity: 0.85;
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 
 .notebook-filter-toggle-btn {
@@ -2636,11 +2672,15 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 }
 
 .notebook-filter-toggle-btn:hover {
+  background: var(--ink);
+  color: var(--bg);
   border-color: var(--ink);
 }
 
 .notebook-filter-toggle-btn.active {
-  background: rgba(107,107,107,0.1);
+  background: var(--bg);
+  color: var(--ink);
+  border-color: var(--ink);
   font-weight: 600;
 }
 
@@ -2803,11 +2843,10 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 .insight-card-bar.bold   { background: var(--ink); }
 
 .insight-card-header {
-  padding: 14px 18px 8px;
+  padding: 14px 18px 4px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px dashed var(--border);
+  justify-content: flex-end;
 }
 
 .insight-card-type {
@@ -4007,7 +4046,7 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   display: flex;
   width: 176px;
   height: 24px;
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(107, 107, 107, 0.04);
   border: 1px solid var(--border);
   padding: 1px;
   cursor: pointer;

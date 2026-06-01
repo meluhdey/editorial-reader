@@ -22,7 +22,7 @@ export default function Navbar({
   user,
   onOpenAccount,
 }: NavbarProps) {
-  let logoText = "GUEST'S FOOTNOTES";
+  let logoText = "MELODY'S FOOTNOTES";
   if (user) {
     const firstName = user.user_metadata?.first_name;
     if (firstName) {
@@ -34,7 +34,7 @@ export default function Navbar({
       logoText = "YOUR FOOTNOTES";
     }
   } else {
-    logoText = "GUEST'S FOOTNOTES";
+    logoText = "MELODY'S FOOTNOTES";
   }
 
   return (
