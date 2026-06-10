@@ -4070,6 +4070,24 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   left: calc(50%);
 }
 
+/* 3-position column switch overrides */
+.pdf-column-switch.switch-three {
+  width: 290px;
+}
+.pdf-column-switch.switch-three .pdf-column-switch-slider {
+  width: calc(33.33% - 1px);
+}
+.pdf-column-switch.switch-three .pdf-column-switch-slider.position-1 {
+  left: 1px;
+}
+.pdf-column-switch.switch-three .pdf-column-switch-slider.position-2 {
+  left: calc(33.33% + 0.5px);
+}
+.pdf-column-switch.switch-three .pdf-column-switch-slider.position-3 {
+  left: calc(66.66%);
+}
+
+
 .pdf-column-switch-option {
   position: relative;
   z-index: 1;

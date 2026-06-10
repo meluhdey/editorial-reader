@@ -467,7 +467,16 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [pdfColumns, setPdfColumns] = useState<1 | 2>(1);
+  const [pdfColumns, setPdfColumns] = useState<'1' | '2' | 'original'>('1');
+
+  const pdfUrl = useMemo(() => {
+    if (!article.url) return '';
+    if (article.url.startsWith('local-upload://')) {
+      const filename = article.url.replace('local-upload://', '');
+      return `/api/uploads/${encodeURIComponent(filename)}`;
+    }
+    return article.url;
+  }, [article.url]);
 
   const isPdfArticle = article.tags.includes('pdf');
 
@@ -737,30 +746,57 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
           <div className="pdf-reader-toolbar">
             <div className="pdf-column-switch-container">
               <span className="pdf-column-switch-label">LAYOUT MODES</span>
-              <div className="pdf-column-switch" onClick={() => setPdfColumns(c => c === 1 ? 2 : 1)}>
-                <div className={`pdf-column-switch-slider position-${pdfColumns}`} />
-                <span className={`pdf-column-switch-option ${pdfColumns === 1 ? 'active' : ''}`}>1 COLUMN</span>
-                <span className={`pdf-column-switch-option ${pdfColumns === 2 ? 'active' : ''}`}>2 COLUMNS</span>
+              <div className="pdf-column-switch switch-three">
+                <div className={`pdf-column-switch-slider ${
+                  pdfColumns === '1' ? 'position-1' : pdfColumns === '2' ? 'position-2' : 'position-3'
+                }`} />
+                <span 
+                  className={`pdf-column-switch-option ${pdfColumns === '1' ? 'active' : ''}`}
+                  onClick={() => setPdfColumns('1')}
+                >
+                  1 COLUMN
+                </span>
+                <span 
+                  className={`pdf-column-switch-option ${pdfColumns === '2' ? 'active' : ''}`}
+                  onClick={() => setPdfColumns('2')}
+                >
+                  2 COLUMNS
+                </span>
+                <span 
+                  className={`pdf-column-switch-option ${pdfColumns === 'original' ? 'active' : ''}`}
+                  onClick={() => setPdfColumns('original')}
+                >
+                  ORIGINAL PDF
+                </span>
               </div>
             </div>
           </div>
         )}
 
         {isPdfArticle ? (
-          <div 
-            ref={pdfContainerRef}
-            className="pdf-viewer-workspace" 
-            onScroll={handleScroll}
-            onMouseUp={handleMouseUp} 
-            onClick={handleContentClick}
-          >
-            {pdfPages.map((pageText, idx) => {
-              const parts = pageText.split('<!-- FOOTNOTES -->');
-              const bodyText = parts[0];
-              const footnoteText = parts[1];
+          pdfColumns === 'original' ? (
+            <div className="reader-pdf-iframe-container">
+              <iframe
+                src={pdfUrl}
+                title={article.title}
+                className="reader-pdf-iframe"
+              />
+            </div>
+          ) : (
+            <div 
+              ref={pdfContainerRef}
+              className="pdf-viewer-workspace" 
+              onScroll={handleScroll}
+              onMouseUp={handleMouseUp} 
+              onClick={handleContentClick}
+            >
+              {pdfPages.map((pageText, idx) => {
+                const parts = pageText.split('<!-- FOOTNOTES -->');
+                const bodyText = parts[0];
+                const footnoteText = parts[1];
 
-              return (
-                <div key={idx} className={`pdf-page-sim-sheet ${pdfColumns === 2 ? 'pdf-page--two-columns' : ''}`}>
+                return (
+                  <div key={idx} className={`pdf-page-sim-sheet ${pdfColumns === '2' ? 'pdf-page--two-columns' : ''}`}>
                   <div className="pdf-page-header">
                     <span>{article.title}</span>
                     <span className="pdf-page-num">PAGE {idx + 1} OF {pdfPages.length}</span>
@@ -825,6 +861,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
               );
             })}
           </div>
+          )
         ) : (
           <>
             <img
