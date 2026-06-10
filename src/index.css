@@ -220,12 +220,11 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
 }
 
 .lib-filter-bar {
-  padding: 12px 40px 12px;
+  padding: 12px 40px;
   display: flex;
   align-items: center;
   gap: 16px;
   border-top: 1px solid var(--border);
-  margin-top: 14px; /* space after count */
 }
 
 .lib-filter-toggle {
@@ -261,6 +260,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-h
 
 .lib-filter-panel {
   overflow: hidden;
+  border-bottom: 1px solid var(--border);
   padding: 12px 40px 14px;
   display: flex;
   flex-direction: column;
@@ -2685,13 +2685,12 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 }
 
 /* Filters panel inside dashboard */
-.notebook-dashboard-filters {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: 16px 40px;
+.notebook-dashboard .lib-filter-panel {
+  overflow: hidden;
+  padding: 12px 40px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
   flex-shrink: 0;
 }
 

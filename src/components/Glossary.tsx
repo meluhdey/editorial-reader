@@ -27,10 +27,11 @@ export default function Glossary({ articles, onSelect }: GlossaryProps) {
   const unthemed: Article[] = [];
 
   articles.forEach(article => {
-    if (article.tags.length === 0) {
+    const cleanTags = article.tags.filter(t => t !== 'pdf');
+    if (cleanTags.length === 0) {
       unthemed.push(article);
     } else {
-      article.tags.forEach(tag => {
+      cleanTags.forEach(tag => {
         if (!topicsMap[tag]) topicsMap[tag] = [];
         topicsMap[tag].push(article);
       });

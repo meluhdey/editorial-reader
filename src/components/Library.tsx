@@ -72,7 +72,9 @@ export default function Library({ articles, onSelect, onDelete, onUpdate }: Libr
   // Collect all unique tags and sources
   const allTags = useMemo(() => {
     const set = new Set<string>();
-    articles.forEach((a) => a.tags?.forEach((t) => set.add(t)));
+    articles.forEach((a) => a.tags?.forEach((t) => {
+      if (t !== 'pdf') set.add(t);
+    }));
     return Array.from(set).sort();
   }, [articles]);
 
@@ -232,9 +234,9 @@ export default function Library({ articles, onSelect, onDelete, onUpdate }: Libr
                 />
 
                 {/* Tag pills overlaid on image */}
-                {article.tags && article.tags.length > 0 && (
+                {article.tags && article.tags.filter(t => t !== 'pdf').length > 0 && (
                   <div className="lib-card-tags">
-                    {article.tags.slice(0, 3).map((tag) => (
+                    {article.tags.filter(t => t !== 'pdf').slice(0, 3).map((tag) => (
                       <span key={tag} className="lib-card-tag">
                         {tag.toUpperCase()}
                       </span>

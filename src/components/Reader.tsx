@@ -566,12 +566,14 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
   /* ── Tag management ── */
   const addTag = () => {
     const t = tagInput.trim().toLowerCase();
-    if (!t || article.tags.includes(t)) { setTagInput(''); return; }
+    if (!t || t === 'pdf' || article.tags.includes(t)) { setTagInput(''); return; }
     onUpdate({ ...article, tags: [...article.tags, t] });
     setTagInput('');
   };
-  const removeTag = (tag: string) =>
+  const removeTag = (tag: string) => {
+    if (tag === 'pdf') return;
     onUpdate({ ...article, tags: article.tags.filter((t) => t !== tag) });
+  };
 
   /* ── Highlight selection ── */
   const handleMouseUp = useCallback(() => {
@@ -839,9 +841,9 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
                 </a>
               </div>
 
-              {article.tags.length > 0 && (
+              {article.tags.filter(t => t !== 'pdf').length > 0 && (
                 <div className="reader-tags-inline">
-                  {article.tags.join(' / ')}
+                  {article.tags.filter(t => t !== 'pdf').join(' / ')}
                 </div>
               )}
             </div>
@@ -949,7 +951,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
             <span className="sidebar-label">TOPICS AND THEMES</span>
             <div className="tag-chip-list">
               <AnimatePresence>
-                {article.tags.map((tag) => (
+                {article.tags.filter(t => t !== 'pdf').map((tag) => (
                   <motion.span 
                     key={tag} 
                     className="tag-chip"

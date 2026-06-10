@@ -239,7 +239,9 @@ export default function Notebook({
   // Extract all tags and article titles for filters
   const allTags = useMemo(() => {
     const set = new Set<string>();
-    articles.forEach(a => a.tags?.forEach(t => set.add(t)));
+    articles.forEach(a => a.tags?.forEach(t => {
+      if (t !== 'pdf') set.add(t);
+    }));
     return Array.from(set).sort();
   }, [articles]);
 
@@ -336,8 +338,9 @@ export default function Notebook({
     let html = '';
 
     if (insight.type === 'highlight') {
-      const tagsList = insight.articleTags.length > 0 
-        ? `<span class="embedded-tags">${insight.articleTags.map(t => '#' + t.toUpperCase()).join(' ')}</span>`
+      const cleanTags = insight.articleTags.filter(t => t !== 'pdf');
+      const tagsList = cleanTags.length > 0 
+        ? `<span class="embedded-tags">${cleanTags.map(t => '#' + t.toUpperCase()).join(' ')}</span>`
         : '';
       
       html = `

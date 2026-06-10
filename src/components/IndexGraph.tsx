@@ -56,29 +56,32 @@ function clamp(value: number, min: number, max: number): number {
 function buildGraph(articles: Article[]): { nodes: GraphNode[]; links: GraphLink[] } {
   const nodes: GraphNode[] = [];
   const links: GraphLink[] = [];
-  const tagSet = new Set<string>();
+  const tagCounts: Record<string, number> = {};
 
   articles.forEach((article) => {
+    const cleanTags = article.tags.filter((t) => t !== 'pdf');
+    // Article node (text) is secondary: fixed small radius
     const articleNode: ArticleNode = {
       id: article.id,
       type: 'article',
       label: article.title,
       article,
-      r: clamp(6 + article.tags.length * 2, 6, 16),
+      r: 6,
     };
     nodes.push(articleNode);
-    article.tags.forEach((tag) => {
-      tagSet.add(tag);
+    cleanTags.forEach((tag) => {
+      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
       links.push({ source: article.id, target: `tag:${tag}` });
     });
   });
 
-  tagSet.forEach((tag) => {
+  Object.entries(tagCounts).forEach(([tag, count]) => {
+    // Tag node (idea) grows with more articles connected to it
     const tagNode: TagNode = {
       id: `tag:${tag}`,
       type: 'tag',
       label: tag,
-      r: 5,
+      r: clamp(6 + count * 2, 6, 20),
     };
     nodes.push(tagNode);
   });
@@ -372,7 +375,7 @@ function GraphView({ articles, onSelect }: GraphViewProps) {
             const baseOpacity = dimmed ? 0.1 : 1;
 
             if (node.type === 'tag') {
-              const size2 = 10;
+              const size2 = node.r * 1.5;
               return (
                 <g
                   key={node.id}
@@ -466,7 +469,7 @@ function MatrixView({ articles, onSelect }: MatrixViewProps) {
   const [hoveredCol, setHoveredCol] = useState<string | null>(null);
 
   const allTags = Array.from(
-    new Set(articles.flatMap((a) => a.tags)),
+    new Set(articles.flatMap((a) => a.tags.filter((t) => t !== 'pdf'))),
   ).sort();
 
   return (

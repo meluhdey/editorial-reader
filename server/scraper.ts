@@ -364,25 +364,29 @@ function extractAndCleanFootnotes(pagesRaw: string[]): { cleanedPages: string[];
   const pageFootnotesList: string[][] = [];
   const cleanedPages: string[] = [];
 
-  for (let pageIdx = 0; pageIdx < pagesRaw.length; pageIdx++) {
-    const pageText = pagesRaw[pageIdx];
-    const lines = pageText.split(/\r?\n/).map(line => line.trim());
-    
-    // 1. First, strip page numbers from the page lines
-    const nonPageNumLines = lines.filter(line => {
-      const trimmed = line.trim();
-      if (!trimmed) return true;
-      const isPageNum = 
-        /^\d+$/.test(trimmed) || 
-        /^[ivxldcmIVXLDCM]+$/.test(trimmed) ||
-        /^page\s+\d+/i.test(trimmed) ||
-        /^\d+\s+of\s+\d+/i.test(trimmed) ||
-        /^[-—–]\s*\d+\s*[-—–]$/.test(trimmed) ||
-        /^\[\s*\d+\s*\]$/.test(trimmed) ||
-        /^(page|pg|p|part|ch|chapter|sec|section)\.?\s*[-–—]?\s*\d+(\s*of\s*\d+)?$/i.test(trimmed) ||
-        /^\d+\s*[-–—]\s*\d+$/.test(trimmed) ||
-        /^[\(\[\{-—–\s\*✦~•]*\d+[\)\]\}-—–\s\*✦~•]*$/.test(trimmed);
-      return !isPageNum;
+  // Pre-pass: collect all pages' lines for processing
+  const allPagesLines: string[][] = pagesRaw.map(p =>
+    p.split(/\r?\n/).map(l => l.trim())
+  );
+
+
+  for (let pageIdx = 0; pageIdx < allPagesLines.length; pageIdx++) {
+    const lines = allPagesLines[pageIdx];
+
+    // Strip bare page-number lines first
+    const stripped = lines.filter(line => {
+      if (!line) return true;
+      return !(
+        /^\d+$/.test(line) ||
+        /^[ivxldcmIVXLDCM]+$/.test(line) ||
+        /^page\s+\d+/i.test(line) ||
+        /^\d+\s+of\s+\d+/i.test(line) ||
+        /^[-—–]\s*\d+\s*[-—–]$/.test(line) ||
+        /^\[\s*\d+\s*\]$/.test(line) ||
+        /^(page|pg|p|part|ch|chapter|sec|section)\.?\s*[-–—]?\s*\d+(\s*of\s*\d+)?$/i.test(line) ||
+        /^\d+\s*[-–—]\s*\d+$/.test(line) ||
+        /^[\(\[\{-—–\s\*✦~•]*\d+[\)\]\}-—–\s\*✦~•]*$/.test(line)
+      );
     });
 
     const bodyLines: string[] = [];
@@ -391,58 +395,85 @@ function extractAndCleanFootnotes(pagesRaw: string[]): { cleanedPages: string[];
     let currentMarker = '';
     let insideFootnote = false;
 
-    for (let i = 0; i < nonPageNumLines.length; i++) {
-      const line = nonPageNumLines[i];
+    for (let i = 0; i < stripped.length; i++) {
+      const line = stripped[i];
+
+      // Empty line — end any open footnote
       if (!line) {
-        if (insideFootnote) {
+        if (insideFootnote && currentFootnote) {
+          pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
+          currentFootnote = '';
+          currentMarker = '';
           insideFootnote = false;
-          if (currentFootnote) {
-            pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
-            currentFootnote = '';
-            currentMarker = '';
-          }
         }
         bodyLines.push('');
         continue;
       }
 
-      // Check if this line matches a footnote starter
-      const match = line.match(/^(\d+|\*|†|‡|§)\s*(?:\.|\)|\])?\s+(.+)$/);
-      const isLikelySectionHeading = line.length < 65 && !/[.\]\)]\s*$/.test(line);
-      const isStarter = match && !isLikelySectionHeading;
+      // Pattern A (classic): "1. Text…" or "1 Text…" or "† Text…" on one line
+      const sameLine = line.match(/^(\d+|[*†‡§])\s*(?:[.\)\]])\s+(.+)$/) ||
+                       line.match(/^(\d+|[*†‡§])\s+(.+)$/);
 
-      if (isStarter && match) {
+      // Pattern B (split): bare marker on its own line, e.g. just "1" or "†"
+      // followed by text on the next non-empty line
+      const bareMarker = line.match(/^(\d+|[*†‡§])$/);
+      const nextNonEmpty = (): string => {
+        for (let j = i + 1; j < stripped.length; j++) {
+          if (stripped[j]) return stripped[j];
+        }
+        return '';
+      };
+
+      const isLikelySectionHeading = (l: string) =>
+        l.length < 65 && !/[.\]\)]\s*$/.test(l) && /^[A-Z0-9]/.test(l);
+
+      if (sameLine && !isLikelySectionHeading(line)) {
+        const m = sameLine;
+        // Commit previous footnote
         if (currentFootnote) {
           pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
         }
-        currentMarker = match[1];
-        currentFootnote = match[2];
+        currentMarker = m[1];
+        currentFootnote = m[2];
         insideFootnote = true;
-      } else {
-        if (insideFootnote) {
-          // Check if the previous line ended a sentence
-          const previousLine = i > 0 ? nonPageNumLines[i - 1] : '';
-          const endedSentence = previousLine ? /[.!?]['"]?\s*$/.test(previousLine) : false;
 
-          // Check if this line starts with metadata or section headers, signaling end of footnote
-          const startsWithMetadata = /^(abstract|keywords|submitted|received|accepted|published|how to cite|copyright|©|doi|isbn|issn)\b/i.test(line);
-          const startsWithSectionHeader = /^\d+\.\s+[A-Z]/i.test(line);
-
-          if (endedSentence && (startsWithMetadata || startsWithSectionHeader)) {
-            insideFootnote = false;
-            pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
-            currentFootnote = '';
-            currentMarker = '';
-            bodyLines.push(line);
-          } else {
-            currentFootnote += ' ' + line;
-          }
-        } else {
-          bodyLines.push(line);
+      } else if (bareMarker && nextNonEmpty() && !isLikelySectionHeading(nextNonEmpty())) {
+        // Bare marker: commit any open footnote, start a new one from the NEXT line
+        if (currentFootnote) {
+          pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
         }
+        currentMarker = bareMarker[1];
+        currentFootnote = '';   // text will be added by the next iteration
+        insideFootnote = true;
+
+      } else if (insideFootnote) {
+        const prevLine = i > 0 ? stripped[i - 1] : '';
+        const endedSentence = prevLine ? /[.!?]['"]?\s*$/.test(prevLine) : false;
+        const startsWithMetadata = /^(abstract|keywords|submitted|received|accepted|published|how to cite|copyright|©|doi|isbn|issn)\b/i.test(line);
+        const startsWithSection = /^\d+\.\s+[A-Z]/.test(line);
+
+        if (endedSentence && (startsWithMetadata || startsWithSection)) {
+          if (currentFootnote) {
+            pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
+          }
+          insideFootnote = false;
+          currentFootnote = '';
+          currentMarker = '';
+          bodyLines.push(line);
+        } else {
+          // Accumulate footnote text (handles the split-line pattern: marker was bare, now we get text)
+          if (currentFootnote) {
+            currentFootnote += ' ' + line;
+          } else {
+            currentFootnote = line;
+          }
+        }
+      } else {
+        bodyLines.push(line);
       }
     }
 
+    // Commit any trailing footnote
     if (currentFootnote) {
       pageFootnotes.push(`[${currentMarker}] ${currentFootnote}`.trim());
     }
