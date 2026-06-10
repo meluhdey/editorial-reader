@@ -754,7 +754,8 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
         onScroll={isPdfArticle ? undefined : handleScroll}
         style={{ 
           display: isPdfArticle ? 'flex' : undefined,
-          flexDirection: isPdfArticle ? 'column' : undefined
+          flexDirection: isPdfArticle ? 'column' : undefined,
+          overflow: isPdfArticle && pdfColumns === 'original' ? 'hidden' : undefined
         }}
       >
         {isPdfArticle && (
@@ -792,7 +793,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
           pdfColumns === 'original' ? (
             <div className="reader-pdf-iframe-container">
               <iframe
-                src={pdfUrl}
+                src={`${pdfUrl}#view=FitH&toolbar=0`}
                 title={article.title}
                 className="reader-pdf-iframe"
               />
