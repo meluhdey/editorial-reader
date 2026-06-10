@@ -471,6 +471,46 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
 
   const isPdfArticle = article.tags.includes('pdf');
 
+  // Refs for tracking scroll containers
+  const normalContainerRef = useRef<HTMLDivElement | null>(null);
+  const pdfContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Save scroll position to localStorage
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    localStorage.setItem(`scroll-pos-${article.id}`, String(target.scrollTop));
+  }, [article.id]);
+
+  // Restore scroll position when article.id or layout mode changes
+  useEffect(() => {
+    const container = isPdfArticle ? pdfContainerRef.current : normalContainerRef.current;
+    if (!container) return;
+
+    const saved = localStorage.getItem(`scroll-pos-${article.id}`);
+    if (saved) {
+      const parsed = parseFloat(saved);
+      if (!isNaN(parsed)) {
+        container.scrollTop = parsed;
+        const timer1 = setTimeout(() => {
+          container.scrollTop = parsed;
+        }, 50);
+        const timer2 = setTimeout(() => {
+          container.scrollTop = parsed;
+        }, 150);
+        const timer3 = setTimeout(() => {
+          container.scrollTop = parsed;
+        }, 300);
+        return () => {
+          clearTimeout(timer1);
+          clearTimeout(timer2);
+          clearTimeout(timer3);
+        };
+      }
+    } else {
+      container.scrollTop = 0;
+    }
+  }, [article.id, isPdfArticle, pdfColumns]);
+
   const pdfPages = useMemo(() => {
     if (!isPdfArticle) return [];
     // Split by horizontal rules "---" surrounded by empty lines
@@ -685,7 +725,9 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
 
       {/* ── LEFT: article ── */}
       <div 
+        ref={isPdfArticle ? undefined : normalContainerRef}
         className="reader-left" 
+        onScroll={isPdfArticle ? undefined : handleScroll}
         style={{ 
           display: isPdfArticle ? 'flex' : undefined,
           flexDirection: isPdfArticle ? 'column' : undefined
@@ -705,7 +747,13 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
         )}
 
         {isPdfArticle ? (
-          <div className="pdf-viewer-workspace" onMouseUp={handleMouseUp} onClick={handleContentClick}>
+          <div 
+            ref={pdfContainerRef}
+            className="pdf-viewer-workspace" 
+            onScroll={handleScroll}
+            onMouseUp={handleMouseUp} 
+            onClick={handleContentClick}
+          >
             {pdfPages.map((pageText, idx) => {
               const parts = pageText.split('<!-- FOOTNOTES -->');
               const bodyText = parts[0];
