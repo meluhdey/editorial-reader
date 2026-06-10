@@ -471,11 +471,26 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
 
   const pdfUrl = useMemo(() => {
     if (!article.url) return '';
+    let filename = '';
     if (article.url.startsWith('local-upload://')) {
-      const filename = article.url.replace('local-upload://', '');
-      return `/api/uploads/${encodeURIComponent(filename)}`;
+      filename = article.url.replace('local-upload://', '');
+    } else if (article.url.includes('/api/uploads/')) {
+      filename = article.url.split('/api/uploads/')[1];
+    } else {
+      return article.url;
     }
-    return article.url;
+
+    // Fully decode filename to plain text
+    let decoded = filename;
+    try {
+      while (decoded !== decodeURIComponent(decoded)) {
+        decoded = decodeURIComponent(decoded);
+      }
+    } catch {
+      decoded = filename;
+    }
+
+    return `/api/uploads/${encodeURIComponent(decoded)}`;
   }, [article.url]);
 
   const isPdfArticle = article.tags.includes('pdf');
