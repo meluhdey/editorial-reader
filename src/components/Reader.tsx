@@ -467,31 +467,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [pdfColumns, setPdfColumns] = useState<'1' | '2' | 'original'>('1');
-
-  const pdfUrl = useMemo(() => {
-    if (!article.url) return '';
-    let filename = '';
-    if (article.url.startsWith('local-upload://')) {
-      filename = article.url.replace('local-upload://', '');
-    } else if (article.url.includes('/api/uploads/')) {
-      filename = article.url.split('/api/uploads/')[1];
-    } else {
-      return article.url;
-    }
-
-    // Fully decode filename to plain text
-    let decoded = filename;
-    try {
-      while (decoded !== decodeURIComponent(decoded)) {
-        decoded = decodeURIComponent(decoded);
-      }
-    } catch {
-      decoded = filename;
-    }
-
-    return `/api/uploads/${encodeURIComponent(decoded)}`;
-  }, [article.url]);
+  const [pdfColumns, setPdfColumns] = useState<'1' | '2'>('1');
 
   const isPdfArticle = article.tags.includes('pdf');
 
@@ -754,17 +730,16 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
         onScroll={isPdfArticle ? undefined : handleScroll}
         style={{ 
           display: isPdfArticle ? 'flex' : undefined,
-          flexDirection: isPdfArticle ? 'column' : undefined,
-          overflow: isPdfArticle && pdfColumns === 'original' ? 'hidden' : undefined
+          flexDirection: isPdfArticle ? 'column' : undefined
         }}
       >
         {isPdfArticle && (
           <div className="pdf-reader-toolbar">
             <div className="pdf-column-switch-container">
               <span className="pdf-column-switch-label">LAYOUT MODES</span>
-              <div className="pdf-column-switch switch-three">
+              <div className="pdf-column-switch">
                 <div className={`pdf-column-switch-slider ${
-                  pdfColumns === '1' ? 'position-1' : pdfColumns === '2' ? 'position-2' : 'position-3'
+                  pdfColumns === '1' ? 'position-1' : 'position-2'
                 }`} />
                 <span 
                   className={`pdf-column-switch-option ${pdfColumns === '1' ? 'active' : ''}`}
@@ -778,34 +753,19 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
                 >
                   2 COLUMNS
                 </span>
-                <span 
-                  className={`pdf-column-switch-option ${pdfColumns === 'original' ? 'active' : ''}`}
-                  onClick={() => setPdfColumns('original')}
-                >
-                  ORIGINAL PDF
-                </span>
               </div>
             </div>
           </div>
         )}
 
         {isPdfArticle ? (
-          pdfColumns === 'original' ? (
-            <div className="reader-pdf-iframe-container">
-              <iframe
-                src={`${pdfUrl}#view=FitH&toolbar=0`}
-                title={article.title}
-                className="reader-pdf-iframe"
-              />
-            </div>
-          ) : (
-            <div 
-              ref={pdfContainerRef}
-              className="pdf-viewer-workspace" 
-              onScroll={handleScroll}
-              onMouseUp={handleMouseUp} 
-              onClick={handleContentClick}
-            >
+          <div 
+            ref={pdfContainerRef}
+            className="pdf-viewer-workspace" 
+            onScroll={handleScroll}
+            onMouseUp={handleMouseUp} 
+            onClick={handleContentClick}
+          >
               {pdfPages.map((pageText, idx) => {
                 const parts = pageText.split('<!-- FOOTNOTES -->');
                 const bodyText = parts[0];
@@ -877,7 +837,6 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
               );
             })}
           </div>
-          )
         ) : (
           <>
             <img
