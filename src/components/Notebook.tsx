@@ -1,18 +1,22 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trash2, Search, Plus, Filter, BookOpen, Copy, PlusCircle, LayoutGrid, FileText, ChevronLeft, ChevronRight, X, Bold, Italic, Underline } from 'lucide-react';
 import type { Article, NotebookNote, Highlight } from '../types';
-import { htmlToMarkdown, markdownToHtml } from '../lib/markdown';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
+import { contentToHtml, htmlToStoredContent, isHtmlContent } from '../lib/markdown';
+
+/** Idle time after the last keystroke before an autosave fires. */
+const AUTOSAVE_DELAY_MS = 1200;
 
 function stripMarkdownAndHtml(text: string): string {
   if (!text) return '';
-  // 1. Strip HTML tags
+  // 1. Strip HTML tags (and the format marker, which is an HTML comment)
   let clean = text.replace(/<[^>]*>/g, '');
-  // 2. Strip bold and italics markdown tags
-  clean = clean.replace(/\*\*|__|[\*_~]/g, '');
+  // 2. Strip markdown emphasis markers — only for legacy markdown notes. HTML
+  //    notes carry emphasis in tags, so any * or _ left is literal text the
+  //    user typed and must survive into the snippet.
+  if (!isHtmlContent(text)) {
+    clean = clean.replace(/\*\*|__|[\*_~]/g, '');
+  }
   // 3. Normalize spacing/newlines
   clean = clean.replace(/\s+/g, ' ');
   return clean.trim();
@@ -66,31 +70,13 @@ export default function Notebook({
   const [titleDraft, setTitleDraft] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editorMode, setEditorMode] = useState<'edit' | 'preview'>('edit');
-  const editorRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving'>('idle');
 
-  // Update drafts when active note changes or editor mode changes
-  useEffect(() => {
-    if (activeNote) {
-      setTitleDraft(activeNote.title);
-      setIsEditingTitle(false);
-      setIsDirty(false);
-      // Sync editorRef innerHTML only if the note ID has changed or if it's a different note in DOM
-      if (editorRef.current) {
-        if (editorRef.current.getAttribute('data-note-id') !== activeNote.id) {
-          editorRef.current.innerHTML = markdownToHtml(activeNote.content || '');
-          editorRef.current.setAttribute('data-note-id', activeNote.id);
-        }
-      }
-    } else {
-      setTitleDraft('');
-      setIsDirty(false);
-      if (editorRef.current) {
-        editorRef.current.innerHTML = '';
-        editorRef.current.removeAttribute('data-note-id');
-      }
-    }
-  }, [selectedNoteId, activeNote?.id, editorMode]);
+  // The editor's live HTML, kept outside the DOM so it survives the
+  // contentEditable div unmounting when the user switches to PREVIEW.
+  const liveHtmlRef = useRef('');
 
   const activeNoteRef = useRef(activeNote);
   const onUpdateNoteRef = useRef(onUpdateNote);
@@ -102,43 +88,124 @@ export default function Notebook({
     isDirtyRef.current = isDirty;
   }, [activeNote, onUpdateNote, isDirty]);
 
-  // Navigate off / Tab switch / Unmount auto-save
-  useEffect(() => {
-    return () => {
-      if (isDirtyRef.current && activeNoteRef.current && editorRef.current) {
-        const html = editorRef.current.innerHTML;
-        const markdown = htmlToMarkdown(html);
-        onUpdateNoteRef.current({
-          ...activeNoteRef.current,
-          content: markdown,
-          updatedAt: Date.now()
-        });
-      }
-    };
-  }, [selectedNoteId]);
+  /** Pull the editor's current HTML out of the DOM into liveHtmlRef. */
+  const captureEditorHtml = useCallback(() => {
+    if (editorRef.current) liveHtmlRef.current = editorRef.current.innerHTML;
+    return liveHtmlRef.current;
+  }, []);
 
-  const saveNote = () => {
-    if (!activeNote || !editorRef.current) return;
-    const html = editorRef.current.innerHTML;
-    const markdown = htmlToMarkdown(html);
-    onUpdateNote({
-      ...activeNote,
-      content: markdown,
-      updatedAt: Date.now()
-    });
+  /**
+   * Attach/populate the contentEditable div. Runs on every mount, so toggling
+   * EDIT -> PREVIEW -> EDIT restores the *live* text rather than re-hydrating
+   * the last saved copy and silently dropping unsaved edits.
+   */
+  const attachEditor = useCallback((el: HTMLDivElement | null) => {
+    editorRef.current = el;
+    if (el && el.innerHTML !== liveHtmlRef.current) {
+      el.innerHTML = liveHtmlRef.current;
+    }
+  }, []);
+
+  // Load the selected note into the editor. Deliberately NOT keyed on
+  // editorMode — re-running this on a preview toggle was what wiped the note.
+  useEffect(() => {
+    if (activeNote) {
+      setTitleDraft(activeNote.title);
+      setIsEditingTitle(false);
+      setIsDirty(false);
+      liveHtmlRef.current = contentToHtml(activeNote.content || '');
+    } else {
+      setTitleDraft('');
+      setIsDirty(false);
+      liveHtmlRef.current = '';
+    }
+    if (editorRef.current) editorRef.current.innerHTML = liveHtmlRef.current;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNoteId, activeNote?.id]);
+
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelAutosave = useCallback(() => {
+    if (autosaveTimer.current) {
+      clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = null;
+    }
+  }, []);
+
+  /**
+   * Persist the editor's current content. `expectedNoteId` guards a queued
+   * autosave from writing one note's body onto another after a fast switch.
+   */
+  const flushSave = useCallback((expectedNoteId?: string) => {
+    cancelAutosave();
+    const note = activeNoteRef.current;
+    if (!note || !isDirtyRef.current) return;
+    if (expectedNoteId && note.id !== expectedNoteId) return;
+
+    const html = captureEditorHtml();
     setIsDirty(false);
-  };
+    isDirtyRef.current = false;
+    setSaveState('saving');
+    Promise.resolve(
+      onUpdateNoteRef.current({ ...note, content: htmlToStoredContent(html), updatedAt: Date.now() })
+    ).finally(() => setSaveState('idle'));
+  }, [cancelAutosave, captureEditorHtml]);
+
+  const scheduleAutosave = useCallback(() => {
+    const noteId = activeNoteRef.current?.id;
+    cancelAutosave();
+    autosaveTimer.current = setTimeout(() => {
+      autosaveTimer.current = null;
+      flushSave(noteId);
+    }, AUTOSAVE_DELAY_MS);
+  }, [cancelAutosave, flushSave]);
+
+  // Save on note switch / leaving the notebook.
+  useEffect(() => {
+    return () => flushSave();
+  }, [selectedNoteId, flushSave]);
+
+  // Save when the tab is hidden or the window is closed, so edits aren't lost
+  // to a closed laptop or a refresh mid-thought.
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === 'hidden') flushSave(); };
+    const onUnload = () => flushSave();
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('beforeunload', onUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('beforeunload', onUnload);
+    };
+  }, [flushSave]);
+
+  const saveNote = () => flushSave();
 
   const handleEditableInput = () => {
+    captureEditorHtml();
     setIsDirty(true);
+    isDirtyRef.current = true;
+    scheduleAutosave();
+  };
+
+  /** Toggle EDIT/PREVIEW, capturing the editor DOM before it unmounts. */
+  const switchEditorMode = (mode: 'edit' | 'preview') => {
+    captureEditorHtml();
+    setEditorMode(mode);
   };
 
   const saveTitle = () => {
     const trimmed = titleDraft.trim();
     if (activeNote && trimmed && trimmed !== activeNote.title) {
+      // Carry the live body along: spreading activeNote alone would write the
+      // last *saved* content back over anything typed since.
+      const html = captureEditorHtml();
+      setIsDirty(false);
+      isDirtyRef.current = false;
+      cancelAutosave();
       onUpdateNote({
         ...activeNote,
         title: trimmed,
+        content: htmlToStoredContent(html),
         updatedAt: Date.now()
       });
     } else if (activeNote) {
@@ -148,7 +215,7 @@ export default function Notebook({
   };
 
   const applyFormatting = (formatType: 'bold' | 'italic' | 'underline') => {
-    setEditorMode('edit');
+    switchEditorMode('edit');
     setTimeout(() => {
       if (!editorRef.current || !activeNote) return;
       editorRef.current.focus();
@@ -332,7 +399,7 @@ export default function Notebook({
   const injectInsightIntoNote = (insight: typeof allInsights[number]) => {
     if (!activeNote) return;
 
-    setEditorMode('edit');
+    switchEditorMode('edit');
 
     const dateFormatted = formatDate(insight.createdAt);
     let html = '';
@@ -559,10 +626,11 @@ export default function Notebook({
                   <div className="notebook-writer-actions">
                     <button 
                       className={`btn-curator-toggle save-note-btn ${isDirty ? 'dirty' : ''}`}
+                      disabled={saveState === 'saving'}
                       onClick={saveNote}
-                      title="Save note changes"
+                      title={isDirty ? 'Save now (autosaves as you type)' : 'All changes saved'}
                     >
-                      {isDirty ? 'SAVE' : 'SAVED'}
+                      {saveState === 'saving' ? 'SAVING…' : isDirty ? 'SAVE' : 'SAVED'}
                     </button>
                     <button 
                       className={`btn-curator-toggle ${isDrawerOpen ? 'active' : ''}`}
@@ -623,13 +691,13 @@ export default function Notebook({
                     <div className="toolbar-right">
                       <button 
                         className={`toolbar-mode-btn ${editorMode === 'edit' ? 'active' : ''}`}
-                        onClick={() => setEditorMode('edit')}
+                        onClick={() => switchEditorMode('edit')}
                       >
                         EDIT
                       </button>
-                      <button 
+                      <button
                         className={`toolbar-mode-btn ${editorMode === 'preview' ? 'active' : ''}`}
-                        onClick={() => setEditorMode('preview')}
+                        onClick={() => switchEditorMode('preview')}
                       >
                         PREVIEW
                       </button>
@@ -638,21 +706,23 @@ export default function Notebook({
 
                   {editorMode === 'edit' ? (
                     <div
-                      ref={editorRef}
+                      ref={attachEditor}
                       contentEditable={true}
                       className="notebook-editor-editable"
                       placeholder="Weave your thoughts and insights here. Bold, italics, and underline supported..."
                       onInput={handleEditableInput}
                       onPaste={handlePaste}
                       onKeyDown={handleKeyDown}
+                      onBlur={() => flushSave()}
                       suppressContentEditableWarning
                     />
                   ) : (
-                    <div className="notebook-editor-editable preview-mode">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                        {activeNote.content}
-                      </ReactMarkdown>
-                    </div>
+                    // Renders the live editor HTML, not activeNote.content —
+                    // previewing before a save used to show a blank note.
+                    <div
+                      className="notebook-editor-editable preview-mode"
+                      dangerouslySetInnerHTML={{ __html: liveHtmlRef.current }}
+                    />
                   )}
                 </div>
               </div>
