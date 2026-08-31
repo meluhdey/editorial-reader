@@ -5,7 +5,10 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { ArrowLeft, ExternalLink, Trash2, X, BookmarkPlus, Loader2, Bold, Italic, Underline } from 'lucide-react';
 import type { Article, Highlight } from '../types';
-import { htmlToMarkdown, markdownToHtml } from '../lib/markdown';
+import { contentToHtml, htmlToStoredContent } from '../lib/markdown';
+
+/** Idle time after the last keystroke before article notes are persisted. */
+const NOTES_SAVE_DELAY_MS = 800;
 
 const fallbackPaintings = [
   'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=800&auto=format&fit=crop',
@@ -554,21 +557,62 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
   useEffect(() => {
     if (notesEditorRef.current) {
       if (notesEditorRef.current.getAttribute('data-article-id') !== article.id) {
-        notesEditorRef.current.innerHTML = markdownToHtml(article.notes || '');
+        notesEditorRef.current.innerHTML = contentToHtml(article.notes || '');
         notesEditorRef.current.setAttribute('data-article-id', article.id);
       }
     }
   }, [article.id]);
 
-  const handleNotesInput = () => {
-    if (notesEditorRef.current) {
-      const html = notesEditorRef.current.innerHTML;
-      const markdown = htmlToMarkdown(html);
-      onUpdate({
-        ...article,
-        notes: markdown
-      });
+  // Persisting on every keystroke re-uploaded the whole article (full body
+  // included) per character. Debounce the write and flush on the ways out.
+  const articleRef = useRef(article);
+  const onUpdateRef = useRef(onUpdate);
+  const notesDirtyRef = useRef(false);
+  const notesSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    articleRef.current = article;
+    onUpdateRef.current = onUpdate;
+  }, [article, onUpdate]);
+
+  const flushNotes = useCallback(() => {
+    if (notesSaveTimer.current) {
+      clearTimeout(notesSaveTimer.current);
+      notesSaveTimer.current = null;
     }
+    if (!notesDirtyRef.current || !notesEditorRef.current) return;
+    // Only write to the article the editor is actually showing.
+    const shownId = notesEditorRef.current.getAttribute('data-article-id');
+    if (shownId && shownId !== articleRef.current.id) return;
+    notesDirtyRef.current = false;
+    onUpdateRef.current({
+      ...articleRef.current,
+      notes: htmlToStoredContent(notesEditorRef.current.innerHTML)
+    });
+  }, []);
+
+  // Flush when switching articles or leaving the reader.
+  useEffect(() => () => flushNotes(), [article.id, flushNotes]);
+
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === 'hidden') flushNotes(); };
+    const onUnload = () => flushNotes();
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('beforeunload', onUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('beforeunload', onUnload);
+    };
+  }, [flushNotes]);
+
+  const handleNotesInput = () => {
+    if (!notesEditorRef.current) return;
+    notesDirtyRef.current = true;
+    if (notesSaveTimer.current) clearTimeout(notesSaveTimer.current);
+    notesSaveTimer.current = setTimeout(() => {
+      notesSaveTimer.current = null;
+      flushNotes();
+    }, NOTES_SAVE_DELAY_MS);
   };
 
   const applyFormatting = (formatType: 'bold' | 'italic' | 'underline') => {
@@ -1091,6 +1135,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
               onInput={handleNotesInput}
               onPaste={handleNotesPaste}
               onKeyDown={handleNotesKeyDown}
+              onBlur={flushNotes}
               suppressContentEditableWarning
             />
           </div>

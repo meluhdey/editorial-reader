@@ -126,6 +126,50 @@ function unescapeMarkdown(md: string): string {
   return out;
 }
 
+/** How many unescape passes a legacy value needs before it stops changing. */
+function countUnescapePasses(md: string): number {
+  let out = md;
+  let passes = 0;
+  for (let i = 0; i < 10; i++) {
+    const next = out.replace(TURNDOWN_ESCAPED, '$1');
+    if (next === out) break;
+    out = next;
+    passes++;
+  }
+  return passes;
+}
+
+// A token that survives the markdown regexes below without matching any of
+// them: NUL-delimited, digits only. Real note text never contains NUL.
+const LITERAL_TOKEN = /\u0000L(\d+)\u0000/g;
+
+/**
+ * Unescape a legacy note, but swap the *last* level of escaped characters for
+ * inert tokens first.
+ *
+ * Escaping is what distinguishes a literal from syntax: Turndown wrote a
+ * literal underscore as `\_` and left real emphasis as a bare `_`. Unescaping
+ * before the markdown pass erases that distinction, so `file\_name\_here`
+ * would come back as file<em>name</em>here. Tokenising the escaped characters
+ * keeps them out of the converter's reach; restoreLiterals puts them back.
+ */
+function protectEscapedLiterals(md: string): string {
+  const passes = countUnescapePasses(md);
+  if (passes === 0) return md;
+
+  let out = md;
+  // Collapse the compounded layers, leaving one level of escapes intact.
+  for (let i = 0; i < passes - 1; i++) {
+    out = out.replace(TURNDOWN_ESCAPED, '$1');
+  }
+  // That remaining level marks the genuine literals.
+  return out.replace(TURNDOWN_ESCAPED, (_m, ch: string) => `\u0000L${ch.charCodeAt(0)}\u0000`);
+}
+
+function restoreLiterals(html: string): string {
+  return html.replace(LITERAL_TOKEN, (_m, code: string) => String.fromCharCode(parseInt(code, 10)));
+}
+
 /**
  * Marker written at the head of every note saved by the current editor.
  *
@@ -176,7 +220,7 @@ function wrapLooseListItems(html: string): string {
 export function contentToHtml(content: string): string {
   if (!content) return '';
   if (isHtmlContent(content)) return content.slice(HTML_FORMAT_MARKER.length);
-  return wrapLooseListItems(markdownToHtml(unescapeMarkdown(content)));
+  return restoreLiterals(wrapLooseListItems(markdownToHtml(protectEscapedLiterals(content))));
 }
 
 /**
@@ -191,4 +235,50 @@ export function htmlToStoredContent(html: string): string {
   const trimmed = html.trim();
   if (trimmed === '<br>' || trimmed === '<p><br></p>' || trimmed === '<div><br></div>') return '';
   return HTML_FORMAT_MARKER + trimmed;
+}
+
+/**
+ * Convert stored note content to readable plain text.
+ *
+ * Article notes are surfaced in the Insights Curator both as escaped JSX text
+ * and inlined into an embed card, neither of which should show raw markup.
+ * Handles both storage formats so the curator reads the same either way.
+ */
+export function contentToPlainText(content: string): string {
+  if (!content) return '';
+
+  let text = content;
+  if (isHtmlContent(text)) {
+    text = text.slice(HTML_FORMAT_MARKER.length);
+    // Turn block boundaries into newlines before dropping the tags, so
+    // paragraphs and list items don't run together into one word.
+    text = text.replace(/<br\s*\/?>/gi, '\n');
+    text = text.replace(/<\/(p|div|li|h[1-6]|blockquote|ul|ol)>/gi, '\n');
+    text = text.replace(/<[^>]*>/g, '');
+    text = text
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&');
+  } else {
+    // Legacy markdown. Protect escaped literals first, or a literal asterisk
+    // the user typed gets stripped along with the emphasis syntax.
+    text = protectEscapedLiterals(text);
+    text = text.replace(/<[^>]*>/g, '');
+    text = text.replace(/^#{1,6}\s+/gm, '');
+    text = text.replace(/^[-*]\s+/gm, '');
+    text = text.replace(/^>\s+/gm, '');
+    text = text.replace(/\*\*|__|[*_~]/g, '');
+    text = restoreLiterals(text);
+  }
+
+  // Collapse runs of blank lines, trim each line, drop leading/trailing space.
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }

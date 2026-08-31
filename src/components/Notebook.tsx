@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trash2, Search, Plus, Filter, BookOpen, Copy, PlusCircle, LayoutGrid, FileText, ChevronLeft, ChevronRight, X, Bold, Italic, Underline } from 'lucide-react';
 import type { Article, NotebookNote, Highlight } from '../types';
-import { contentToHtml, htmlToStoredContent, isHtmlContent } from '../lib/markdown';
+import { contentToHtml, htmlToStoredContent, isHtmlContent, contentToPlainText } from '../lib/markdown';
 
 /** Idle time after the last keystroke before an autosave fires. */
 const AUTOSAVE_DELAY_MS = 1200;
@@ -276,7 +276,9 @@ export default function Notebook({
           savedAt: article.savedAt,
           type: 'note',
           id: `${article.id}-note`,
-          text: article.notes,
+          // Curator shows this as text and inlines it into embed cards, so
+          // strip the storage format rather than leaking tags or markdown.
+          text: contentToPlainText(article.notes),
           createdAt: article.savedAt
         });
       }
