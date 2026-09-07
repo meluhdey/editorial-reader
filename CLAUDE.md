@@ -57,7 +57,7 @@ interface Article {
   content: string;    // Markdown, cleaned by Turndown
   url: string;
   tags: string[];     // extracted from page meta; user can add/remove in Reader
-  headerImageUrl: string; // og:image, or fallback SVG (base64)
+  headerImageUrl: string; // og:image; '' when none — client draws a procedural cover
   highlights: Highlight[];
   notes: string;
   savedAt: number;
@@ -94,7 +94,11 @@ All tokens are CSS custom properties in `src/index.css`:
 4. **Stage 3 — Largest paragraph block**: last resort
 5. Convert cleaned HTML → Markdown via Turndown
 6. Extract tags from: JSON-LD `keywords`, `<meta name="keywords">`, `article:tag`, DOM tag links
-7. Header image: `og:image` → `twitter:image` → first large `<img>` → geometric SVG fallback
+7. Header image: `og:image` → `twitter:image` → first large `<img>`, else `''`.
+   When empty, the client renders a deterministic procedural SVG cover keyed on
+   the article id (`src/lib/fallbackArt.ts` — 8 styles × 8 palettes; gradients,
+   arcs, contours, halftone, Bauhaus shapes, mesh). The Library card's shuffle
+   button reshuffles a cover and persists it.
 
 ## Reader layout
 

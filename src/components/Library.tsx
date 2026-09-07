@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RotateCw } from 'lucide-react';
 import type { Article } from '../types';
+import { coverFor, randomCover } from '../lib/fallbackArt';
 
 interface LibraryProps {
   articles: Article[];
@@ -33,19 +34,6 @@ type SortOrder = 'newest' | 'oldest';
 
 const highlightColors = ['yellow', 'green', 'blue', 'purple', 'orange'];
 
-const fallbackPaintings = [
-  'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1578301978018-3005759f48f7?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1576016770956-debb63d900ee?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1580136579312-94651dfd596d?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1605721911519-3dfeb3be25e7?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1584727638096-042c45049edd?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1579783928621-7a13d66a62d1?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1580136608260-4eb11f4b24fe?q=80&w=800&auto=format&fit=crop'
-];
-
 function hashId(id: string): number {
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
@@ -56,10 +44,7 @@ function hashId(id: string): number {
 
 function getCardImageUrl(article: Article): string {
   const url = article.headerImageUrl;
-  if (!url || url.includes('upload.wikimedia.org')) {
-    const idx = hashId(article.id) % fallbackPaintings.length;
-    return fallbackPaintings[idx];
-  }
+  if (!url || url.includes('upload.wikimedia.org')) return coverFor(article.id);
   return url;
 }
 
@@ -226,7 +211,7 @@ export default function Library({ articles, onSelect, onDelete, onUpdate }: Libr
                   loading="lazy"
                   onError={(e) => {
                     const target = e.currentTarget;
-                    const fallback = fallbackPaintings[hashId(article.id) % fallbackPaintings.length];
+                    const fallback = coverFor(article.id);
                     if (target.src !== fallback) {
                       target.src = fallback;
                     }
@@ -244,20 +229,14 @@ export default function Library({ articles, onSelect, onDelete, onUpdate }: Libr
                   </div>
                 )}
 
-                {/* Delete and Randomise banner on hover */}
-                {article.tags && article.tags.includes('pdf') && onUpdate && (
+                {/* Shuffle the cover art (any article) on hover */}
+                {onUpdate && (
                   <button
                     className="lib-card-refresh"
-                    title="Randomise banner image"
+                    title="Shuffle cover art"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const currentUrl = article.headerImageUrl;
-                      const available = fallbackPaintings.filter((p) => p !== currentUrl);
-                      const randomUrl = available[Math.floor(Math.random() * available.length)];
-                      onUpdate({
-                        ...article,
-                        headerImageUrl: randomUrl,
-                      });
+                      onUpdate({ ...article, headerImageUrl: randomCover() });
                     }}
                   >
                     <RotateCw size={13} />

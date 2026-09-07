@@ -190,7 +190,7 @@ function buildArticleFromReader(url: string, reader: ReaderResult) {
     content: reader.markdown,
     url,
     tags: [] as string[],
-    headerImageUrl: reader.headerImageUrl || getRandomClassicalPainting(),
+    headerImageUrl: reader.headerImageUrl || '',
     highlights: [],
     notes: '',
     savedAt: Date.now(),
@@ -448,23 +448,6 @@ function htmlToMarkdown(html: string, baseUrl: string): string {
 function makeAbsolute(url: string, base: string): string {
   if (!url || url.startsWith('data:')) return url;
   try { return new URL(url, base).href; } catch { return url; }
-}
-
-function buildFallbackSvg(): string {
-  const palette = ['#CC0000', '#1A1A1A', '#8B7355', '#C4B89A'];
-  const shapes = Array.from({ length: 6 }, (_, i) => {
-    const c = palette[i % palette.length];
-    const x = (i * 137) % 760;
-    const y = (i * 89) % 360;
-    const w = 50 + (i * 67) % 120;
-    const h = 40 + (i * 53) % 90;
-    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}" opacity="${0.18 + (i % 3) * 0.09}" transform="rotate(${i * 12} ${x + w / 2} ${y + h / 2})"/>`;
-  }).join('');
-  const circles = [0, 1, 2].map((i) =>
-    `<circle cx="${150 + i * 280}" cy="${120 + (i * 80) % 160}" r="${40 + i * 20}" fill="${palette[(i + 1) % 4]}" opacity="${0.12 + i * 0.06}"/>`,
-  ).join('');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400"><rect width="800" height="400" fill="#F5F1E6"/>${shapes}${circles}</svg>`;
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
 function extractAndCleanFootnotes(pagesRaw: string[]): { cleanedPages: string[]; pageFootnotes: string[][] } {
@@ -862,23 +845,8 @@ function cleanPDFText(text: string): string {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
-const CLASSICAL_PAINTINGS = [
-  'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1578301978018-3005759f48f7?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1576016770956-debb63d900ee?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1580136579312-94651dfd596d?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1605721911519-3dfeb3be25e7?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1584727638096-042c45049edd?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1579783928621-7a13d66a62d1?q=80&w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1580136608260-4eb11f4b24fe?q=80&w=800&auto=format&fit=crop'
-];
-
-function getRandomClassicalPainting(): string {
-  const idx = Math.floor(Math.random() * CLASSICAL_PAINTINGS.length);
-  return CLASSICAL_PAINTINGS[idx];
-}
+// When no header image is found we store an empty string; the client fills in a
+// deterministic procedural cover (src/lib/fallbackArt.ts) keyed on the article id.
 
 function extractTitleAndAuthorFromFirstPage(rawText: string, filename: string): { title?: string; author?: string } {
   // Clean filename for matching
@@ -1037,7 +1005,7 @@ export async function processPDFBuffer(buffer: Buffer | ArrayBuffer, filename: s
     content,
     url: sourceUrl || `local-upload://${filename}`,
     tags: ['pdf', 'uploaded'],
-    headerImageUrl: getRandomClassicalPainting(),
+    headerImageUrl: '',
     highlights: [],
     notes: '',
     savedAt: Date.now(),
@@ -1094,7 +1062,7 @@ export async function scrapeAndProcess(url: string) {
     content,
     url,
     tags,
-    headerImageUrl: headerImageUrl || getRandomClassicalPainting(),
+    headerImageUrl: headerImageUrl || '',
     highlights: [],
     notes: '',
     savedAt: Date.now(),
