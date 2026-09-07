@@ -83,7 +83,12 @@ All tokens are CSS custom properties in `src/index.css`:
 
 ## Scraping pipeline (`server/scraper.ts`)
 
-1. Fetch with Googlebot User-Agent (bypasses some paywalls)
+1. Fetch with a desktop-Chrome User-Agent (`CHROME_UA`)
+   - On a bot-block / upstream failure (403 / 429 / 451 / 5xx), retry once via the
+     reader proxy `r.jina.ai` (`fetchViaReader` → `buildArticleFromReader`), which
+     returns clean Markdown directly — skips the Readability/Cheerio stages below.
+     Override base with `READER_PROXY_URL`; set `JINA_API_KEY` for higher limits.
+     A real 404/401/410 is *not* retried — it surfaces as-is.
 2. **Stage 1 — Mozilla Readability**: best-quality article extraction
 3. **Stage 2 — Cheerio heuristics**: fallback if Readability yields < 300 chars
 4. **Stage 3 — Largest paragraph block**: last resort

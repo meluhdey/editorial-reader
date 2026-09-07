@@ -45,6 +45,14 @@ async function loadPdfjs(): Promise<PdfjsModule> {
 const CHROME_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+// Reader-proxy fallback. When a direct fetch is blocked (Cloudflare / WAF bot
+// protection returns 403/429/503 to datacenter IPs regardless of User-Agent),
+// we retry through Jina's reader, which renders the page with a real browser
+// and returns clean Markdown. Override the base with READER_PROXY_URL; set
+// JINA_API_KEY for higher rate limits.
+const READER_PROXY = process.env.READER_PROXY_URL || 'https://r.jina.ai/';
+const READER_TIMEOUT_MS = 20_000;
+
 const td = new TurndownService({
   headingStyle: 'atx',
   codeBlockStyle: 'fenced',
@@ -86,8 +94,105 @@ async function fetchResource(url: string): Promise<Response> {
     },
     redirect: 'follow',
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status} — could not fetch ${url}`);
+  if (!res.ok) {
+    const err = new Error(`HTTP ${res.status} — could not fetch ${url}`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
   return res;
+}
+
+// ── Reader-proxy fallback ──────────────────────────────────────────────────
+
+interface ReaderResult {
+  title: string;
+  headerImageUrl?: string;
+  markdown: string;
+}
+
+async function fetchViaReader(url: string): Promise<ReaderResult> {
+  // Note: do NOT send a browser User-Agent here — the reader rejects requests
+  // that pose as a browser (403). The default runtime UA is what it expects.
+  const headers: Record<string, string> = {};
+  if (process.env.JINA_API_KEY) {
+    headers.Authorization = `Bearer ${process.env.JINA_API_KEY}`;
+  }
+
+  // The keyless tier is rate-limited and occasionally 403/429s a request that
+  // succeeds moments later, so retry once with a short backoff.
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+    const res = await fetch(READER_PROXY + url, {
+      headers,
+      redirect: 'follow',
+      signal: AbortSignal.timeout(READER_TIMEOUT_MS),
+    });
+    if (res.ok) return parseReaderPayload(await res.text());
+    lastStatus = res.status;
+    if (![403, 408, 429, 500, 502, 503, 504].includes(res.status)) break;
+  }
+  throw new Error(`HTTP ${lastStatus} — could not fetch ${url}`);
+}
+
+// Jina's reader returns a small header block followed by the article body:
+//   Title: …
+//   URL Source: …
+//   Image Source: …              (optional)
+//   Markdown Content:
+//   <markdown…>
+function parseReaderPayload(raw: string): ReaderResult {
+  const marker = raw.indexOf('Markdown Content:');
+  const header = marker === -1 ? '' : raw.slice(0, marker);
+  let markdown = marker === -1 ? raw.trim() : raw.slice(marker + 'Markdown Content:'.length).trim();
+
+  const grab = (label: string): string => {
+    const m = header.match(new RegExp(`^${label}:[ \\t]*(.+)$`, 'm'));
+    return m ? m[1].trim() : '';
+  };
+
+  const title = grab('Title');
+
+  // Drop a leading H1 that just repeats the title, so it isn't rendered twice.
+  if (title) {
+    const dupH1 = new RegExp(`^#\\s+${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n+`, 'i');
+    markdown = markdown.replace(dupH1, '');
+  }
+
+  let headerImageUrl = grab('Image Source');
+  if (!headerImageUrl) {
+    const firstImg = markdown.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
+    if (firstImg) headerImageUrl = firstImg[1];
+  }
+
+  return {
+    title: title || 'Untitled Article',
+    headerImageUrl: headerImageUrl || undefined,
+    markdown,
+  };
+}
+
+function buildArticleFromReader(url: string, reader: ReaderResult) {
+  if (!reader.markdown || reader.markdown.length < 50) {
+    throw new Error('Could not extract readable content from this page.');
+  }
+  // The site may 403 real and missing URLs alike; the reader then hands back the
+  // site's own error page. Catch the obvious ones instead of saving them.
+  if (/^(page not found|page unavailable|not found|404\b|403 forbidden|access denied|just a moment|attention required)/i.test(reader.title.trim())) {
+    throw new Error('Page not found (or blocked) at the source.');
+  }
+  return {
+    id: crypto.randomUUID(),
+    title: reader.title || 'Untitled Article',
+    author: undefined as string | undefined,
+    content: reader.markdown,
+    url,
+    tags: [] as string[],
+    headerImageUrl: reader.headerImageUrl || getRandomClassicalPainting(),
+    highlights: [],
+    notes: '',
+    savedAt: Date.now(),
+  };
 }
 
 // ── Meta extraction (cheerio, lightweight) ─────────────────────────────────
@@ -938,7 +1043,27 @@ export async function processPDFBuffer(buffer: Buffer | ArrayBuffer, filename: s
 }
 
 export async function scrapeAndProcess(url: string) {
-  const res = await fetchResource(url);
+  let res: Response;
+  try {
+    res = await fetchResource(url);
+  } catch (err) {
+    // Only fall back for statuses that signal bot-blocking / transient upstream
+    // trouble (Cloudflare & friends). A 404/401/410 is a real answer — surface it.
+    const status = (err as { status?: number })?.status;
+    const shouldFallback = status === undefined || status === 403 || status === 429 || status === 451 || status >= 500;
+    if (!shouldFallback) throw err;
+
+    console.warn('[scrape] direct fetch blocked, trying reader proxy —', err instanceof Error ? err.message : err);
+    try {
+      const reader = await fetchViaReader(url);
+      return buildArticleFromReader(url, reader);
+    } catch (readerErr) {
+      const original = err instanceof Error ? err.message : String(err);
+      const fallback = readerErr instanceof Error ? readerErr.message : String(readerErr);
+      throw new Error(`${original} (reader proxy also failed: ${fallback})`);
+    }
+  }
+
   const contentType = res.headers.get('content-type') || '';
   const cleanUrl = url.toLowerCase().split('?')[0].split('#')[0];
   const isPdf = contentType.includes('application/pdf') || cleanUrl.endsWith('.pdf');
