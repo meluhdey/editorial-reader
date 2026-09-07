@@ -106,14 +106,16 @@ async function fetchResource(url: string): Promise<Response> {
 
 interface ReaderResult {
   title: string;
+  author?: string;
   headerImageUrl?: string;
   markdown: string;
 }
 
 async function fetchViaReader(url: string): Promise<ReaderResult> {
-  // Note: do NOT send a browser User-Agent here — the reader rejects requests
-  // that pose as a browser (403). The default runtime UA is what it expects.
-  const headers: Record<string, string> = {};
+  // Ask for JSON so we also get the page's <head> metadata (og:image, author,
+  // upstream status) — the plain-text mode drops the hero image. Do NOT send a
+  // browser User-Agent: the reader 403s requests that pose as a browser.
+  const headers: Record<string, string> = { Accept: 'application/json' };
   if (process.env.JINA_API_KEY) {
     headers.Authorization = `Bearer ${process.env.JINA_API_KEY}`;
   }
@@ -128,45 +130,50 @@ async function fetchViaReader(url: string): Promise<ReaderResult> {
       redirect: 'follow',
       signal: AbortSignal.timeout(READER_TIMEOUT_MS),
     });
-    if (res.ok) return parseReaderPayload(await res.text());
+    if (res.ok) return parseReaderJson(await res.json(), url);
     lastStatus = res.status;
     if (![403, 408, 429, 500, 502, 503, 504].includes(res.status)) break;
   }
   throw new Error(`HTTP ${lastStatus} — could not fetch ${url}`);
 }
 
-// Jina's reader returns a small header block followed by the article body:
-//   Title: …
-//   URL Source: …
-//   Image Source: …              (optional)
-//   Markdown Content:
-//   <markdown…>
-function parseReaderPayload(raw: string): ReaderResult {
-  const marker = raw.indexOf('Markdown Content:');
-  const header = marker === -1 ? '' : raw.slice(0, marker);
-  let markdown = marker === -1 ? raw.trim() : raw.slice(marker + 'Markdown Content:'.length).trim();
-
-  const grab = (label: string): string => {
-    const m = header.match(new RegExp(`^${label}:[ \\t]*(.+)$`, 'm'));
-    return m ? m[1].trim() : '';
-  };
-
-  const title = grab('Title');
-
-  // Drop a leading H1 that just repeats the title, so it isn't rendered twice.
-  if (title) {
-    const dupH1 = new RegExp(`^#\\s+${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n+`, 'i');
-    markdown = markdown.replace(dupH1, '');
+// Jina's JSON reader response: { data: { title, content (markdown), description,
+// publishedTime, httpStatus, metadata: { "og:image", author, … } } }
+function parseReaderJson(payload: unknown, url: string): ReaderResult {
+  const root = payload as { data?: Record<string, unknown> };
+  const data = (root?.data && typeof root.data === 'object' ? root.data : payload) as Record<string, unknown>;
+  if (!data || typeof data !== 'object') {
+    throw new Error(`reader returned no data for ${url}`);
   }
 
-  let headerImageUrl = grab('Image Source');
+  // The reader still 200s when the *upstream* page was 401/403/404/410 — it just
+  // hands back that error page. Treat those as real failures.
+  const upstream = Number(data.httpStatus) || 0;
+  if ([401, 403, 404, 410].includes(upstream)) {
+    throw new Error(`HTTP ${upstream} — could not fetch ${url}`);
+  }
+
+  const meta = (data.metadata && typeof data.metadata === 'object' ? data.metadata : {}) as Record<string, unknown>;
+  const pick = (...keys: string[]): string => {
+    for (const k of keys) {
+      const v = meta[k] ?? data[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return '';
+  };
+
+  const markdown = typeof data.content === 'string' ? data.content.trim() : '';
+
+  let headerImageUrl = pick('og:image', 'og:image:url', 'og:image:secure_url', 'twitter:image', 'twitter:image:src');
+  if (headerImageUrl) headerImageUrl = makeAbsolute(headerImageUrl, url);
   if (!headerImageUrl) {
     const firstImg = markdown.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
     if (firstImg) headerImageUrl = firstImg[1];
   }
 
   return {
-    title: title || 'Untitled Article',
+    title: pick('og:title', 'twitter:title') || (typeof data.title === 'string' ? data.title.trim() : '') || 'Untitled Article',
+    author: pick('author', 'article:author', 'sailthru.author', 'parsely-author') || undefined,
     headerImageUrl: headerImageUrl || undefined,
     markdown,
   };
@@ -176,15 +183,10 @@ function buildArticleFromReader(url: string, reader: ReaderResult) {
   if (!reader.markdown || reader.markdown.length < 50) {
     throw new Error('Could not extract readable content from this page.');
   }
-  // The site may 403 real and missing URLs alike; the reader then hands back the
-  // site's own error page. Catch the obvious ones instead of saving them.
-  if (/^(page not found|page unavailable|not found|404\b|403 forbidden|access denied|just a moment|attention required)/i.test(reader.title.trim())) {
-    throw new Error('Page not found (or blocked) at the source.');
-  }
   return {
     id: crypto.randomUUID(),
     title: reader.title || 'Untitled Article',
-    author: undefined as string | undefined,
+    author: reader.author,
     content: reader.markdown,
     url,
     tags: [] as string[],
