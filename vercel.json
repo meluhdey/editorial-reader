@@ -5,7 +5,7 @@
   "functions": {
     "api/*.ts": {
       "includeFiles": "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
-      "maxDuration": 30
+      "maxDuration": 60
     }
   },
   "rewrites": [

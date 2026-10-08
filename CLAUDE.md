@@ -84,11 +84,19 @@ All tokens are CSS custom properties in `src/index.css`:
 ## Scraping pipeline (`server/scraper.ts`)
 
 1. Fetch with a desktop-Chrome User-Agent (`CHROME_UA`)
-   - On a bot-block / upstream failure (403 / 429 / 451 / 5xx), retry once via the
-     reader proxy `r.jina.ai` (`fetchViaReader` → `buildArticleFromReader`), which
-     returns clean Markdown directly — skips the Readability/Cheerio stages below.
-     Override base with `READER_PROXY_URL`; set `JINA_API_KEY` for higher limits.
-     A real 404/401/410 is *not* retried — it surfaces as-is.
+   - On a bot-block / upstream failure (403 / 429 / 451 / 5xx), `scrapeBlocked`
+     runs a fallback chain (45 s budget; `vercel.json` maxDuration 60):
+     1. **Publisher feed** (`PUBLISHER_FEEDS`, currently The Atlantic's section +
+        site feeds) — full text, author, image for recent articles; ~1 s.
+     2. **Wayback Machine** (background) — newest accessible capture from CDX
+        (some captures 402 "contact the site owner"; tries up to 4). Old articles.
+     3. **Reader** `r.jina.ai` in JSON+HTML mode → our Readability pipeline. A
+        cached Cloudflare challenge (upstream 403) is retried with `X-No-Cache`.
+        Do not send a browser UA to it (it 403s those). `READER_PROXY_URL`,
+        `JINA_API_KEY` optional.
+     First result ≥ 6000 chars (feed: ≥ 800) wins, else the longest. Stubs
+     (< 250 plain words, "Page not found") are rejected. A real 404/401/410 from
+     the direct fetch or the reader surfaces as-is.
 2. **Stage 1 — Mozilla Readability**: best-quality article extraction
 3. **Stage 2 — Cheerio heuristics**: fallback if Readability yields < 300 chars
 4. **Stage 3 — Largest paragraph block**: last resort

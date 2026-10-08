@@ -45,13 +45,12 @@ async function loadPdfjs(): Promise<PdfjsModule> {
 const CHROME_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-// Reader-proxy fallback. When a direct fetch is blocked (Cloudflare / WAF bot
-// protection returns 403/429/503 to datacenter IPs regardless of User-Agent),
-// we retry through Jina's reader, which renders the page with a real browser
-// and returns clean Markdown. Override the base with READER_PROXY_URL; set
+// Blocked-site fallbacks (see scrapeBlocked). Jina's reader renders the page
+// with a real browser; override its base with READER_PROXY_URL and set
 // JINA_API_KEY for higher rate limits.
 const READER_PROXY = process.env.READER_PROXY_URL || 'https://r.jina.ai/';
-const READER_TIMEOUT_MS = 20_000;
+// Overall budget for the whole fallback chain — keep under vercel.json maxDuration.
+const FALLBACK_BUDGET_MS = 45_000;
 
 const td = new TurndownService({
   headingStyle: 'atx',
@@ -102,99 +101,249 @@ async function fetchResource(url: string): Promise<Response> {
   return res;
 }
 
-// ── Reader-proxy fallback ──────────────────────────────────────────────────
+// ── Blocked-site fallbacks ─────────────────────────────────────────────────
+//
+// When the direct fetch is bot-blocked (Cloudflare & co. 403 datacenter IPs
+// regardless of User-Agent) we try:
+//   1. the publisher's own RSS/Atom feed — full text for recent articles;
+//   2. the newest accessible Wayback Machine capture (fetched in the background
+//      while step 3 runs), through our normal Readability pipeline;
+//   3. Jina's reader in HTML mode, same pipeline (its Markdown mode keeps the
+//      site's nav/footer); a cached Cloudflare challenge is retried uncached.
+// The first complete-looking result wins, else the longest; stubs (soft-404s,
+// homepage redirects) are rejected.
 
-interface ReaderResult {
-  title: string;
-  author?: string;
-  headerImageUrl?: string;
-  markdown: string;
+type ScrapedArticle = ReturnType<typeof buildArticle>;
+
+class UpstreamError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
 }
 
-async function fetchViaReader(url: string): Promise<ReaderResult> {
-  // Ask for JSON so we also get the page's <head> metadata (og:image, author,
-  // upstream status) — the plain-text mode drops the hero image. Do NOT send a
-  // browser User-Agent: the reader 403s requests that pose as a browser.
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (process.env.JINA_API_KEY) {
-    headers.Authorization = `Bearer ${process.env.JINA_API_KEY}`;
-  }
+// A paywall preview or a challenge page is short; a real article rarely is.
+const COMPLETE_FROM_FEED = 800;
+const COMPLETE_FROM_PAGE = 6000;
+// Below this a fallback result is a stub (a soft-404, a redirect to the
+// homepage) rather than the article — better to report failure than save it.
+const MIN_FALLBACK_WORDS = 250;
 
-  // The keyless tier is rate-limited and occasionally 403/429s a request that
-  // succeeds moments later, so retry once with a short backoff.
+function plainWordCount(markdown: string): number {
+  return markdown
+    .replace(/<img[^>]*>|!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .split(/\s+/)
+    .filter((w) => /\w/.test(w)).length;
+}
+
+function isStub(a: { title: string; content: string }): boolean {
+  return (
+    plainWordCount(a.content) < MIN_FALLBACK_WORDS ||
+    /^(page not found|not found|404\b)/i.test(a.title) ||
+    /^#+\s*page not found/im.test(a.content.slice(0, 600))
+  );
+}
+
+// Publishers whose feeds carry full article text. Section feeds first: they
+// reach further back than the site-wide one.
+const PUBLISHER_FEEDS: Record<string, (u: URL) => string[]> = {
+  'theatlantic.com': (u) => {
+    const section = u.pathname.split('/')[1];
+    const paths = ['/feed/all/', '/feed/best-of/'];
+    if (section && !['magazine', 'newsletters', 'category'].includes(section)) {
+      paths.unshift(`/feed/channel/${section}/`);
+    }
+    return paths.map((p) => `https://www.theatlantic.com${p}`);
+  },
+};
+
+function normalizePath(href: string): string {
+  try {
+    return new URL(href).pathname.replace(/\/+$/, '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+async function fetchViaFeed(url: string, signal: AbortSignal): Promise<ScrapedArticle> {
+  const u = new URL(url);
+  const host = u.hostname.replace(/^www\./, '');
+  const feeds = PUBLISHER_FEEDS[host]?.(u);
+  if (!feeds) throw new Error('no known feed');
+
+  const target = normalizePath(url);
+  const xmls = await Promise.all(
+    feeds.map((f) =>
+      fetch(f, { headers: { 'User-Agent': CHROME_UA }, signal })
+        .then((r) => (r.ok ? r.text() : ''))
+        .catch(() => ''),
+    ),
+  );
+
+  for (const xml of xmls) {
+    if (!xml) continue;
+    const $ = cheerio.load(xml, { xmlMode: true });
+    for (const el of $('entry, item').toArray()) {
+      const $e = $(el);
+      const link =
+        $e.find('link[rel="alternate"]').attr('href') ??
+        $e.find('link').attr('href') ??
+        $e.find('link').first().text();
+      if (normalizePath(link) !== target) continue;
+
+      const bodyHtml =
+        $e.find('content').first().text() ||
+        $e.find('content\\:encoded').first().text() ||
+        $e.find('description').first().text();
+      const content = htmlToMarkdown(bodyHtml, url);
+      const author =
+        $e.find('author > name').map((_, a) => $(a).text().trim()).get().filter(Boolean).join(', ') ||
+        $e.find('dc\\:creator').first().text().trim();
+      const image =
+        $e.find('media\\:content[medium="image"], media\\:content').first().attr('url') ??
+        $e.find('media\\:thumbnail').first().attr('url') ??
+        $e.find('enclosure[type^="image"]').first().attr('url') ??
+        '';
+      const tags = $e.find('category').map((_, c) => ($(c).attr('term') ?? $(c).text()).trim().toLowerCase()).get();
+
+      return buildArticle(url, {
+        // Atom titles may be type="html" (e.g. "<em>Digger</em>") — keep the text.
+        title: cheerio.load($e.find('title').first().text()).root().text().replace(/\s+/g, ' ').trim(),
+        author,
+        content,
+        tags: [...new Set(tags)].filter((t) => t.length > 1 && t.length < 50).slice(0, 8),
+        headerImageUrl: image,
+      });
+    }
+  }
+  throw new Error('article not in feed');
+}
+
+async function fetchHtmlViaReader(url: string, signal: AbortSignal, noCache = false): Promise<string> {
+  // JSON + HTML mode: we get the rendered page *and* the upstream status. Do NOT
+  // send a browser User-Agent — the reader 403s requests that pose as a browser.
+  const headers: Record<string, string> = { Accept: 'application/json', 'X-Return-Format': 'html' };
+  if (noCache) headers['X-No-Cache'] = 'true';
+  if (process.env.JINA_API_KEY) headers.Authorization = `Bearer ${process.env.JINA_API_KEY}`;
+
+  // The keyless tier is rate-limited; retry once on a transient failure.
   let lastStatus = 0;
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
-    const res = await fetch(READER_PROXY + url, {
-      headers,
-      redirect: 'follow',
-      signal: AbortSignal.timeout(READER_TIMEOUT_MS),
-    });
-    if (res.ok) return parseReaderJson(await res.json(), url);
+    const res = await fetch(READER_PROXY + url, { headers, redirect: 'follow', signal });
     lastStatus = res.status;
-    if (![403, 408, 429, 500, 502, 503, 504].includes(res.status)) break;
-  }
-  throw new Error(`HTTP ${lastStatus} — could not fetch ${url}`);
-}
-
-// Jina's JSON reader response: { data: { title, content (markdown), description,
-// publishedTime, httpStatus, metadata: { "og:image", author, … } } }
-function parseReaderJson(payload: unknown, url: string): ReaderResult {
-  const root = payload as { data?: Record<string, unknown> };
-  const data = (root?.data && typeof root.data === 'object' ? root.data : payload) as Record<string, unknown>;
-  if (!data || typeof data !== 'object') {
-    throw new Error(`reader returned no data for ${url}`);
-  }
-
-  // The reader still 200s when the *upstream* page was 401/403/404/410 — it just
-  // hands back that error page. Treat those as real failures.
-  const upstream = Number(data.httpStatus) || 0;
-  if ([401, 403, 404, 410].includes(upstream)) {
-    throw new Error(`HTTP ${upstream} — could not fetch ${url}`);
-  }
-
-  const meta = (data.metadata && typeof data.metadata === 'object' ? data.metadata : {}) as Record<string, unknown>;
-  const pick = (...keys: string[]): string => {
-    for (const k of keys) {
-      const v = meta[k] ?? data[k];
-      if (typeof v === 'string' && v.trim()) return v.trim();
+    if (!res.ok) {
+      if ([408, 429, 500, 502, 503, 504].includes(res.status)) continue;
+      break;
     }
-    return '';
-  };
-
-  const markdown = typeof data.content === 'string' ? data.content.trim() : '';
-
-  let headerImageUrl = pick('og:image', 'og:image:url', 'og:image:secure_url', 'twitter:image', 'twitter:image:src');
-  if (headerImageUrl) headerImageUrl = makeAbsolute(headerImageUrl, url);
-  if (!headerImageUrl) {
-    const firstImg = markdown.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
-    if (firstImg) headerImageUrl = firstImg[1];
+    const payload = (await res.json()) as { data?: { html?: string; httpStatus?: number } };
+    const upstream = Number(payload.data?.httpStatus) || 200;
+    if (upstream >= 400) {
+      throw new UpstreamError(`HTTP ${upstream} — reader could not fetch ${url}`, upstream);
+    }
+    if (payload.data?.html) return payload.data.html;
+    throw new Error('reader returned no HTML');
   }
-
-  return {
-    title: pick('og:title', 'twitter:title') || (typeof data.title === 'string' ? data.title.trim() : '') || 'Untitled Article',
-    author: pick('author', 'article:author', 'sailthru.author', 'parsely-author') || undefined,
-    headerImageUrl: headerImageUrl || undefined,
-    markdown,
-  };
+  throw new UpstreamError(`HTTP ${lastStatus} — reader unavailable`, lastStatus);
 }
 
-function buildArticleFromReader(url: string, reader: ReaderResult) {
-  if (!reader.markdown || reader.markdown.length < 50) {
-    throw new Error('Could not extract readable content from this page.');
+// Newest-first list of raw (`id_`: original bytes, no toolbar or URL rewriting)
+// Wayback captures. Some captures are access-restricted (402), so we return a few.
+async function waybackCandidates(url: string, signal: AbortSignal): Promise<string[]> {
+  // Wayback's APIs find nothing for a percent-encoded URL, so pass it raw (only
+  // the query string is encoded, to keep its `&` out of ours).
+  const u = new URL(url);
+  const target = `${u.host}${u.pathname}${u.search ? encodeURIComponent(u.search) : ''}`;
+  try {
+    const rows = await fetch(
+      `https://web.archive.org/cdx/search/cdx?url=${target}&filter=statuscode:200&fl=timestamp,original&collapse=timestamp:6&limit=-5`,
+      { signal },
+    ).then((r) => (r.ok ? r.text() : ''));
+    const snaps = rows.split('\n').filter((l) => /^\d{14} \S+$/.test(l.trim())).reverse();
+    if (snaps.length) {
+      return snaps.map((l) => {
+        const [ts, original] = l.trim().split(' ');
+        return `https://web.archive.org/web/${ts}id_/${original}`;
+      });
+    }
+  } catch {
+    // CDX is occasionally offline — fall through.
   }
-  return {
-    id: crypto.randomUUID(),
-    title: reader.title || 'Untitled Article',
-    author: reader.author,
-    content: reader.markdown,
-    url,
-    tags: [] as string[],
-    headerImageUrl: reader.headerImageUrl || '',
-    highlights: [],
-    notes: '',
-    savedAt: Date.now(),
+  // Let Wayback redirect to the capture closest to a few dates instead.
+  const y = new Date().getFullYear();
+  return ['2', `${y}0101`, `${y - 1}0101`].map((ts) => `https://web.archive.org/web/${ts}id_/${url}`);
+}
+
+async function fetchHtmlViaWayback(url: string, signal: () => AbortSignal): Promise<string> {
+  const candidates = await waybackCandidates(url, signal());
+  let last = 'no Wayback snapshot';
+  for (const snap of candidates.slice(0, 4)) {
+    const res = await fetch(snap, { signal: signal() }).catch(() => null);
+    if (res?.ok) return res.text();
+    last = `Wayback HTTP ${res?.status ?? 'error'}`;
+  }
+  throw new Error(last);
+}
+
+async function scrapeBlocked(url: string, directError: Error): Promise<ScrapedArticle> {
+  const deadline = Date.now() + FALLBACK_BUDGET_MS;
+  // Per-request timeout, capped by what's left of the overall budget.
+  const signal = (capMs = deadline - Date.now()) =>
+    AbortSignal.timeout(Math.max(1000, Math.min(capMs, deadline - Date.now())));
+  const failures: string[] = [];
+  let best: ScrapedArticle | null = null;
+
+  const consider = (article: ScrapedArticle, completeAt: number): boolean => {
+    if (isStub(article)) {
+      failures.push(`stub result ("${article.title}")`);
+      return false;
+    }
+    if (!best || article.content.length > best.content.length) best = article;
+    return article.content.length >= completeAt;
   };
+  const note = (source: string, err: unknown) =>
+    failures.push(`${source}: ${err instanceof Error ? err.message : String(err)}`);
+
+  // 1. Publisher feed — fast, and full text when the article is recent.
+  try {
+    if (consider(await fetchViaFeed(url, signal(10_000)), COMPLETE_FROM_FEED)) return best!;
+  } catch (err) {
+    note('feed', err);
+  }
+
+  // 2. Wayback, started in the background: it is slow, and for the most
+  //    heavily protected sites it is the only source that works.
+  const wayback = fetchHtmlViaWayback(url, () => signal(15_000))
+    .then((html) => articleFromHtml(html, url))
+    .catch((err) => {
+      note('wayback', err);
+      return null;
+    });
+
+  // 3. Reader (meanwhile) — cached, then uncached if it handed back a challenge page.
+  for (const noCache of [false, true]) {
+    if (Date.now() > deadline) break;
+    try {
+      const html = await fetchHtmlViaReader(url, signal(20_000), noCache);
+      if (consider(articleFromHtml(html, url), COMPLETE_FROM_PAGE)) return best!;
+      break;
+    } catch (err) {
+      note(noCache ? 'reader (uncached)' : 'reader', err);
+      const status = err instanceof UpstreamError ? err.status : 0;
+      // The reader got through and the page is gone — no archive will help.
+      if (status === 404 || status === 410) {
+        if (best) return best;
+        throw new Error(`HTTP ${status} — page not found at ${url}`);
+      }
+      if (status !== 403) break;
+    }
+  }
+
+  const archived = await wayback;
+  if (archived) consider(archived, COMPLETE_FROM_PAGE);
+
+  if (best) return best;
+  throw new Error(`${directError.message} (fallbacks failed — ${failures.join('; ')})`);
 }
 
 // ── Meta extraction (cheerio, lightweight) ─────────────────────────────────
@@ -1023,15 +1172,8 @@ export async function scrapeAndProcess(url: string) {
     const shouldFallback = status === undefined || status === 403 || status === 429 || status === 451 || status >= 500;
     if (!shouldFallback) throw err;
 
-    console.warn('[scrape] direct fetch blocked, trying reader proxy —', err instanceof Error ? err.message : err);
-    try {
-      const reader = await fetchViaReader(url);
-      return buildArticleFromReader(url, reader);
-    } catch (readerErr) {
-      const original = err instanceof Error ? err.message : String(err);
-      const fallback = readerErr instanceof Error ? readerErr.message : String(readerErr);
-      throw new Error(`${original} (reader proxy also failed: ${fallback})`);
-    }
+    console.warn('[scrape] direct fetch blocked, trying fallbacks —', err instanceof Error ? err.message : err);
+    return scrapeBlocked(url, err instanceof Error ? err : new Error(String(err)));
   }
 
   const contentType = res.headers.get('content-type') || '';
@@ -1044,25 +1186,35 @@ export async function scrapeAndProcess(url: string) {
     return processPDFBuffer(arrayBuffer, filename, url);
   }
 
-  const html = await res.text();
+  return articleFromHtml(await res.text(), url);
+}
 
-  const [{ title, author, headerImageUrl }, tags, content] = await Promise.all([
-    Promise.resolve(extractMeta(html, url)),
-    Promise.resolve(extractTags(html)),
-    Promise.resolve(extractContent(html, url)),
-  ]);
+function articleFromHtml(html: string, url: string): ScrapedArticle {
+  const { title, author, headerImageUrl } = extractMeta(html, url);
+  return buildArticle(url, {
+    title,
+    author,
+    content: extractContent(html, url),
+    tags: extractTags(html),
+    headerImageUrl,
+  });
+}
 
-  if (!content || content.length < 50)
+function buildArticle(
+  url: string,
+  a: { title: string; author?: string; content: string; tags: string[]; headerImageUrl?: string },
+) {
+  if (!a.content || a.content.length < 50)
     throw new Error('Could not extract readable content from this page.');
 
   return {
     id: crypto.randomUUID(),
-    title: title || 'Untitled Article',
-    author: author || undefined,
-    content,
+    title: a.title || 'Untitled Article',
+    author: a.author || undefined,
+    content: a.content,
     url,
-    tags,
-    headerImageUrl: headerImageUrl || '',
+    tags: a.tags,
+    headerImageUrl: a.headerImageUrl || '',
     highlights: [],
     notes: '',
     savedAt: Date.now(),
