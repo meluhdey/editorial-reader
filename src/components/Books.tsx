@@ -653,9 +653,8 @@ export default function Books({ books, cloud, onAdd, onUpdate, onDelete }: Books
   const stats = useMemo(() => {
     const rated = books.filter((b) => b.rating > 0);
     return {
-      readThisYear: books.filter(
-        (b) => b.status === 'read' && (b.finishedOn ? b.finishedOn.startsWith(String(year)) : new Date(b.addedAt).getFullYear() === year),
-      ).length,
+      // Only books with a finish date count; imported history has none.
+      readThisYear: books.filter((b) => b.status === 'read' && b.finishedOn?.startsWith(String(year))).length,
       avg: rated.length ? rated.reduce((s, b) => s + b.rating, 0) / rated.length : 0,
       counts: Object.fromEntries(STATUSES.map((s) => [s.id, books.filter((b) => b.status === s.id).length])) as Record<
         BookStatus,
