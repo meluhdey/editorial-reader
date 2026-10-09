@@ -57,7 +57,7 @@ interface Article {
   content: string;    // Markdown, cleaned by Turndown
   url: string;
   tags: string[];     // extracted from page meta; user can add/remove in Reader
-  headerImageUrl: string; // og:image; '' when none — client draws a procedural cover
+  headerImageUrl: string; // og:image; '' when none — client picks a painting/gradient
   highlights: Highlight[];
   notes: string;
   savedAt: number;
@@ -103,10 +103,10 @@ All tokens are CSS custom properties in `src/index.css`:
 5. Convert cleaned HTML → Markdown via Turndown
 6. Extract tags from: JSON-LD `keywords`, `<meta name="keywords">`, `article:tag`, DOM tag links
 7. Header image: `og:image` → `twitter:image` → first large `<img>`, else `''`.
-   When empty, the client renders a deterministic procedural SVG cover keyed on
-   the article id (`src/lib/fallbackArt.ts` — 8 styles × 8 palettes; gradients,
-   arcs, contours, halftone, Bauhaus shapes, mesh). The Library card's shuffle
-   button reshuffles a cover and persists it.
+   When empty (or a legacy generated SVG), the client shows a stable pick from
+   10 Unsplash paintings + 50 gradients (`src/lib/fallbackCovers.ts`; images in
+   `public/covers/gradients`, web copies of "Vibed Applications/Gradients" at
+   1000px JPEG q60). The Library card's shuffle button picks another and saves it.
 
 ## Reader layout
 
@@ -114,6 +114,23 @@ The Reader is a full-viewport split:
 - **Left panel** (`reader-left`): scrollable — hero image, article header, Markdown content
 - **Right panel** (`reader-right`): scrollable — Topics (editable tags), Notes (textarea), Highlights list
 - Text selection (`mouseup`) triggers the highlight popup (colour + optional note)
+
+## Books page (`src/components/Books.tsx`, `src/lib/books.ts`)
+
+- Shelf of books with half-star ratings (0 = unrated), status (want / reading /
+  read / abandoned), started/finished dates, tags and a review. Nav tab: BOOKS.
+- **Covers**: Open Library search API + covers CDN (keyless, CORS-open) —
+  `covers.openlibrary.org/b/id/{cover_i}-L.jpg`, or by ISBN when a work has no
+  cover id. Google Books fills gaps only when Open Library has < 3 covered
+  hits; it 429s without a key (`VITE_GOOGLE_BOOKS_KEY`, optional). No usable
+  cover → a jacket with the title set on one of the gradients (`gradientFor`).
+- **Persistence** (`useBooks`): always mirrored to localStorage
+  (`footnotes-books:<userId|guest>`); synced to the Supabase `books` table
+  when signed in. If the table is missing (PGRST205) the page keeps working
+  locally and shows a note; local books are uploaded on the first successful
+  sync. Create the table with `supabase/books.sql`.
+- To test without signing in: `VITE_SUPABASE_URL= npx vite --port 5174` →
+  "Enter as local guest".
 
 ## Graph view
 

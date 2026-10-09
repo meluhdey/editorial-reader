@@ -54,6 +54,35 @@ alter table public.notebook_notes enable row level security;
 -- Notebook Notes RLS Policies
 create policy "Users can perform all actions on their own notes"
   on public.notebook_notes for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- 3. Create books table (also in supabase/books.sql)
+create table public.books (
+  id text primary key,
+  user_id uuid default auth.uid() references auth.users(id) on delete cascade not null,
+  title text not null,
+  author text default '' not null,
+  year integer,
+  isbn text,
+  pages integer,
+  cover_url text default '' not null,
+  source_key text,
+  status text default 'want' not null check (status in ('want', 'reading', 'read', 'abandoned')),
+  rating numeric(2, 1) default 0 not null check (rating >= 0 and rating <= 5),
+  review text default '' not null,
+  tags jsonb default '[]'::jsonb not null,
+  started_on date,
+  finished_on date,
+  added_at bigint not null,
+  updated_at bigint not null
+);
+
+-- Enable Row-Level Security
+alter table public.books enable row level security;
+
+-- Books RLS Policies
+create policy "Users can perform all actions on their own books"
+  on public.books for all to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);`;
 
 export default function AccountDrawer({

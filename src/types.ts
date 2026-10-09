@@ -27,7 +27,28 @@ export interface NotebookNote {
   updatedAt: number;
 }
 
-export type View = 'library' | 'reader' | 'graph' | 'paste' | 'notebook';
+export type BookStatus = 'want' | 'reading' | 'read' | 'abandoned';
+
+export interface Book {
+  id: string;
+  title: string;
+  author: string;
+  year?: number;
+  isbn?: string;
+  pages?: number;
+  coverUrl: string;        // '' → a generated cover is drawn instead
+  sourceKey?: string;      // Open Library work key, e.g. "/works/OL1998433W"
+  status: BookStatus;
+  rating: number;          // 0 = unrated; otherwise 0.5–5 in half steps
+  review: string;
+  tags: string[];
+  startedOn?: string;      // YYYY-MM-DD
+  finishedOn?: string;     // YYYY-MM-DD
+  addedAt: number;
+  updatedAt: number;
+}
+
+export type View = 'library' | 'reader' | 'graph' | 'paste' | 'notebook' | 'books';
 
 export interface AppState {
   articles: Article[];

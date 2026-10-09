@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { ArrowLeft, ExternalLink, Trash2, X, BookmarkPlus, Loader2, Bold, Italic, Underline } from 'lucide-react';
 import type { Article, Highlight } from '../types';
-import { coverFor } from '../lib/fallbackArt';
+import { fallbackCoverFor, isPlaceholderImage } from '../lib/fallbackCovers';
 import { contentToHtml, htmlToStoredContent } from '../lib/markdown';
 
 /** Idle time after the last keystroke before article notes are persisted. */
@@ -13,7 +13,7 @@ const NOTES_SAVE_DELAY_MS = 800;
 
 function getReaderImageUrl(article: Article): string {
   const url = article.headerImageUrl;
-  if (!url || url.includes('upload.wikimedia.org')) return coverFor(article.id);
+  if (isPlaceholderImage(url)) return fallbackCoverFor(article.id);
   return url;
 }
 
@@ -866,7 +866,7 @@ export default function Reader({ article, onUpdate, onBack, onDelete, onSaveUrl 
               alt=""
               onError={(e) => {
                 const target = e.currentTarget;
-                const fallback = coverFor(article.id);
+                const fallback = fallbackCoverFor(article.id);
                 if (target.src !== fallback) {
                   target.src = fallback;
                 }

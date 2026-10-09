@@ -7,9 +7,11 @@ import Reader from './components/Reader';
 import IndexGraph from './components/IndexGraph';
 import Spotlight from './components/Spotlight';
 import Notebook from './components/Notebook';
+import Books from './components/Books';
 import AccountDrawer from './components/AccountDrawer';
 import Auth from './components/Auth';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { useBooks } from './lib/books';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { Cloud, Loader2 } from 'lucide-react';
 
@@ -67,6 +69,7 @@ export default function App() {
   const [loadingCloud, setLoadingCloud] = useState(false);
   const [guestDataToImport, setGuestDataToImport] = useState<{ articles: Article[]; notes: NotebookNote[] } | null>(null);
   const [importing, setImporting] = useState(false);
+  const { books, cloud: booksCloud, addBook, updateBook, deleteBook } = useBooks(user);
 
   // Initialize Supabase Auth Session
   useEffect(() => {
@@ -598,6 +601,18 @@ export default function App() {
               <IndexGraph
                 articles={state.articles}
                 onSelect={(id) => navigate('reader', id)}
+              />
+            </motion.div>
+          )}
+
+          {state.currentView === 'books' && (
+            <motion.div key="books" {...pageVariants} style={{ height: '100%', overflow: 'auto' }}>
+              <Books
+                books={books}
+                cloud={booksCloud}
+                onAdd={addBook}
+                onUpdate={updateBook}
+                onDelete={deleteBook}
               />
             </motion.div>
           )}

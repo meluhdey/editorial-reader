@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RotateCw } from 'lucide-react';
 import type { Article } from '../types';
-import { coverFor, randomCover } from '../lib/fallbackArt';
+import { fallbackCoverFor, randomFallbackCover, isPlaceholderImage } from '../lib/fallbackCovers';
 
 interface LibraryProps {
   articles: Article[];
@@ -44,7 +44,7 @@ function hashId(id: string): number {
 
 function getCardImageUrl(article: Article): string {
   const url = article.headerImageUrl;
-  if (!url || url.includes('upload.wikimedia.org')) return coverFor(article.id);
+  if (isPlaceholderImage(url)) return fallbackCoverFor(article.id);
   return url;
 }
 
@@ -211,7 +211,7 @@ export default function Library({ articles, onSelect, onDelete, onUpdate }: Libr
                   loading="lazy"
                   onError={(e) => {
                     const target = e.currentTarget;
-                    const fallback = coverFor(article.id);
+                    const fallback = fallbackCoverFor(article.id);
                     if (target.src !== fallback) {
                       target.src = fallback;
                     }
@@ -236,7 +236,7 @@ export default function Library({ articles, onSelect, onDelete, onUpdate }: Libr
                     title="Shuffle cover art"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onUpdate({ ...article, headerImageUrl: randomCover() });
+                      onUpdate({ ...article, headerImageUrl: randomFallbackCover(getCardImageUrl(article)) });
                     }}
                   >
                     <RotateCw size={13} />
