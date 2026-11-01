@@ -21,13 +21,24 @@ const STATUSES: { id: BookStatus; label: string }[] = [
 ];
 const statusLabel = (s: BookStatus) => STATUSES.find((x) => x.id === s)?.label ?? s;
 
-type SortKey = 'recent' | 'rating' | 'title' | 'author';
+type SortKey = 'added-desc' | 'added-asc' | 'finished-desc' | 'rating' | 'title' | 'author';
 const SORTS: { id: SortKey; label: string }[] = [
-  { id: 'recent', label: 'Recent' },
-  { id: 'rating', label: 'Rating' },
-  { id: 'title', label: 'Title' },
-  { id: 'author', label: 'Author' },
+  { id: 'added-desc', label: 'Recently added' },
+  { id: 'added-asc', label: 'Oldest added' },
+  { id: 'finished-desc', label: 'Recently finished' },
+  { id: 'rating', label: 'Highest rated' },
+  { id: 'title', label: 'Title A–Z' },
+  { id: 'author', label: 'Author A–Z' },
 ];
+const SORT_STORAGE_KEY = 'footnotes-books-sort';
+
+function loadSort(): SortKey {
+  try {
+    const saved = localStorage.getItem(SORT_STORAGE_KEY);
+    if (saved && SORTS.some((s) => s.id === saved)) return saved as SortKey;
+  } catch {}
+  return 'added-desc';
+}
 
 // ── Stars ──────────────────────────────────────────────────────────────────
 
@@ -644,7 +655,13 @@ function BookDetail({
 
 export default function Books({ books, cloud, onAdd, onUpdate, onDelete }: BooksProps) {
   const [status, setStatus] = useState<BookStatus | 'all'>('all');
-  const [sort, setSort] = useState<SortKey>('recent');
+  const [sort, setSortState] = useState<SortKey>(loadSort);
+  const setSort = (next: SortKey) => {
+    setSortState(next);
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, next);
+    } catch {}
+  };
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -671,7 +688,11 @@ export default function Books({ books, cloud, onAdd, onUpdate, onDelete }: Books
         (!q || b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q) || b.tags.some((t) => t.includes(q))),
     );
     const by: Record<SortKey, (a: Book, b: Book) => number> = {
-      recent: (a, b) => b.addedAt - a.addedAt,
+      'added-desc': (a, b) => b.addedAt - a.addedAt,
+      'added-asc': (a, b) => a.addedAt - b.addedAt,
+      // Books with a finish date first (newest first), then the rest by date added.
+      'finished-desc': (a, b) =>
+        (b.finishedOn ?? '').localeCompare(a.finishedOn ?? '') || b.addedAt - a.addedAt,
       rating: (a, b) => b.rating - a.rating || b.addedAt - a.addedAt,
       title: (a, b) => a.title.localeCompare(b.title),
       author: (a, b) => a.author.localeCompare(b.author) || a.title.localeCompare(b.title),
@@ -730,17 +751,16 @@ export default function Books({ books, cloud, onAdd, onUpdate, onDelete }: Books
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <div className="books-sort">
-              {SORTS.map((s) => (
-                <button
-                  key={s.id}
-                  className={`books-sort-btn ${sort === s.id ? 'books-sort-btn--active' : ''}`}
-                  onClick={() => setSort(s.id)}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
+            <label className="books-sort">
+              <span>Sort</span>
+              <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+                {SORTS.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
       </div>

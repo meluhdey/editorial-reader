@@ -132,6 +132,19 @@ The Reader is a full-viewport split:
 - To test without signing in: `VITE_SUPABASE_URL= npx vite --port 5174` →
   "Enter as local guest".
 
+## Newsletter tab (`src/components/Newsletters.tsx`, `src/lib/newsletters.ts`)
+
+- Daily "Morning briefing" issues written by a Claude routine at 7am Sydney
+  (claude.ai routine "Morning news briefing (7am Sydney)"). The routine posts
+  each issue to the Supabase RPC `ingest_newsletter` (see
+  `supabase/newsletters.sql`) using the public publishable key plus a shared
+  secret token from the cloud environment variable `FOOTNOTES_NEWSLETTER_TOKEN`.
+  No service-role key is involved; the function only inserts/replaces issues
+  for the one configured account (one per `issue_date`).
+- Grid reuses the Library card styles; cover = lead article's og:image, falling
+  back to a gradient. Reader is a single read-only column (Markdown only, no
+  raw HTML rendered), no side panel.
+
 ## Graph view
 
 - Nodes: one per article, arranged in a circle

@@ -81,6 +81,13 @@ export default function Navbar({
         <span className="navbar-tab-text">BOOKS</span>
       </button>
 
+      <button
+        className={`navbar-tab-vertical ${currentView === 'newsletters' ? 'active' : ''}`}
+        onClick={() => onNavigate('newsletters')}
+      >
+        <span className="navbar-tab-text">NEWSLETTER</span>
+      </button>
+
       {openArticles.map((article) => {
         const isActive = currentView === 'reader' && selectedArticleId === article.id;
         return (

@@ -4325,20 +4325,35 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 }
 .books-filter-input:focus { border-bottom-color: var(--ink); }
 
-.books-sort { display: flex; gap: 12px; }
-.books-sort-btn {
+.books-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--faint);
-  background: none;
-  border: none;
-  padding: 2px 0;
-  cursor: pointer;
-  opacity: 0.6;
+  color: var(--muted);
 }
-.books-sort-btn--active { color: var(--ink); opacity: 1; border-bottom: 1px solid var(--ink); }
+.books-sort select {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 5px 26px 5px 10px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 13px) 50%, calc(100% - 9px) 50%;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+}
+.books-sort select:hover, .books-sort select:focus { border-color: var(--ink); outline: none; }
 
 /* Grid of square tiles */
 .books-grid {
@@ -4733,4 +4748,134 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
 @media (max-width: 480px) {
   .books-grid { grid-template-columns: minmax(0, 1fr); }
   .book-card-status { display: inline; }
+}
+
+/* ─── NEWSLETTER (daily briefing) ────────────────────────────────────────── */
+
+.nl-reader {
+  height: 100%;
+  overflow-y: auto;
+  background: var(--surface);
+}
+
+.nl-reader-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 14px 32px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
+}
+
+.nl-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.nl-back:hover { color: var(--ink); }
+
+.nl-hero { margin: 0; position: relative; }
+.nl-hero-img {
+  display: block;
+  width: 100%;
+  height: min(46vh, 460px);
+  object-fit: cover;
+  background: #D3D3C8;
+  border-bottom: 1px solid var(--border);
+}
+.nl-hero-caption {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: rgba(20, 20, 18, 0.45);
+  padding: 3px 8px;
+}
+.nl-hero-caption a { color: inherit; }
+
+.nl-header,
+.nl-body,
+.nl-footer {
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 32px;
+  padding-right: 32px;
+}
+
+.nl-header { padding-top: 52px; padding-bottom: 28px; border-bottom: 1px solid var(--border); margin-bottom: 36px; }
+
+.nl-kicker {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+
+.nl-title {
+  font-family: var(--serif);
+  font-size: 48px;
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.nl-dek {
+  font-family: var(--serif);
+  font-size: 22px;
+  line-height: 1.35;
+  color: var(--muted);
+  margin-top: 16px;
+}
+
+/* Body: reuse the article typography, tuned for a long single column */
+.nl-body { font-size: 17px; line-height: 1.75; }
+.nl-body h2 {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 3.2em 0 1.4em;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.nl-body h3 {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  margin: 2.2em 0 0.7em;
+  color: var(--ink);
+}
+.nl-body hr { margin: 2.6em 0; }
+
+.nl-footer { padding-top: 24px; padding-bottom: 72px; border-top: 1px solid var(--border); margin-top: 40px; }
+
+@media (max-width: 700px) {
+  .nl-reader-bar { padding: 12px 16px; }
+  .nl-header, .nl-body, .nl-footer { padding-left: 16px; padding-right: 16px; }
+  .nl-header { padding-top: 32px; }
+  .nl-title { font-size: 34px; }
+  .nl-dek { font-size: 19px; }
+  .nl-body { font-size: 16px; }
 }

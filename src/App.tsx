@@ -8,10 +8,12 @@ import IndexGraph from './components/IndexGraph';
 import Spotlight from './components/Spotlight';
 import Notebook from './components/Notebook';
 import Books from './components/Books';
+import Newsletters from './components/Newsletters';
 import AccountDrawer from './components/AccountDrawer';
 import Auth from './components/Auth';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { useBooks } from './lib/books';
+import { useNewsletters } from './lib/newsletters';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { Cloud, Loader2 } from 'lucide-react';
 
@@ -70,6 +72,7 @@ export default function App() {
   const [guestDataToImport, setGuestDataToImport] = useState<{ articles: Article[]; notes: NotebookNote[] } | null>(null);
   const [importing, setImporting] = useState(false);
   const { books, cloud: booksCloud, addBook, updateBook, deleteBook } = useBooks(user);
+  const { newsletters, cloud: newslettersCloud, refresh: refreshNewsletters, deleteNewsletter } = useNewsletters(user);
 
   // Initialize Supabase Auth Session
   useEffect(() => {
@@ -613,6 +616,17 @@ export default function App() {
                 onAdd={addBook}
                 onUpdate={updateBook}
                 onDelete={deleteBook}
+              />
+            </motion.div>
+          )}
+
+          {state.currentView === 'newsletters' && (
+            <motion.div key="newsletters" {...pageVariants} style={{ height: '100%', overflow: 'auto' }}>
+              <Newsletters
+                newsletters={newsletters}
+                cloud={newslettersCloud}
+                onRefresh={refreshNewsletters}
+                onDelete={deleteNewsletter}
               />
             </motion.div>
           )}

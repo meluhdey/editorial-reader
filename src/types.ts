@@ -48,7 +48,20 @@ export interface Book {
   updatedAt: number;
 }
 
-export type View = 'library' | 'reader' | 'graph' | 'paste' | 'notebook' | 'books';
+export interface Newsletter {
+  id: string;
+  issueDate: string;      // YYYY-MM-DD (Sydney date of the issue)
+  title: string;          // e.g. "Morning briefing — Tuesday 3 November 2026"
+  headline: string;       // lead story headline, shown on the card
+  summary: string;        // one-line dek
+  coverUrl: string;       // lead article's image; '' → gradient
+  coverSourceUrl?: string;
+  content: string;        // full briefing, Markdown
+  wordCount: number;
+  createdAt: number;
+}
+
+export type View = 'library' | 'reader' | 'graph' | 'paste' | 'notebook' | 'books' | 'newsletters';
 
 export interface AppState {
   articles: Article[];
