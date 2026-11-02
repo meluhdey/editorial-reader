@@ -59,6 +59,7 @@ export interface Newsletter {
   content: string;        // full briefing, Markdown
   wordCount: number;
   createdAt: number;
+  readAt?: number;        // set when marked read; greys out the cover
 }
 
 export type View = 'library' | 'reader' | 'graph' | 'paste' | 'notebook' | 'books' | 'newsletters';

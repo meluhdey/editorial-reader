@@ -72,7 +72,7 @@ export default function App() {
   const [guestDataToImport, setGuestDataToImport] = useState<{ articles: Article[]; notes: NotebookNote[] } | null>(null);
   const [importing, setImporting] = useState(false);
   const { books, cloud: booksCloud, addBook, updateBook, deleteBook } = useBooks(user);
-  const { newsletters, cloud: newslettersCloud, refresh: refreshNewsletters, deleteNewsletter } = useNewsletters(user);
+  const { newsletters, cloud: newslettersCloud, refresh: refreshNewsletters, deleteNewsletter, setRead: setNewsletterRead } = useNewsletters(user);
 
   // Initialize Supabase Auth Session
   useEffect(() => {
@@ -627,6 +627,7 @@ export default function App() {
                 cloud={newslettersCloud}
                 onRefresh={refreshNewsletters}
                 onDelete={deleteNewsletter}
+                onSetRead={setNewsletterRead}
               />
             </motion.div>
           )}

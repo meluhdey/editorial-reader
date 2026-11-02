@@ -1,17 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Check } from 'lucide-react';
 import type { Newsletter } from '../types';
 import { gradientFor } from '../lib/fallbackCovers';
-import { readingMinutes, stripLeadingTitle } from '../lib/newsletters';
+import { issueOutline, readingMinutes, rehypeHeadingIds, stripLeadingTitle } from '../lib/newsletters';
 
 interface NewslettersProps {
   newsletters: Newsletter[];
   cloud: 'off' | 'loading' | 'ok' | 'missing-table' | 'error';
   onRefresh: () => void;
   onDelete: (id: string) => void;
+  onSetRead: (id: string, read: boolean) => void;
 }
 
 const highlightColors = ['yellow', 'green', 'blue', 'purple', 'orange'];
@@ -60,17 +61,62 @@ function Cover({ issue, className }: { issue: Newsletter; className: string }) {
 
 // ── Reading view ───────────────────────────────────────────────────────────
 
-function NewsletterReader({ issue, onClose }: { issue: Newsletter; onClose: () => void }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+/** Short labels for the section bar. */
+const navLabel = (title: string) => (/longer read/i.test(title) ? 'Longer read' : /sources/i.test(title) ? 'Sources' : title);
 
+function NewsletterReader({
+  issue,
+  onClose,
+  onSetRead,
+}: {
+  issue: Newsletter;
+  onClose: () => void;
+  onSetRead: (read: boolean) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const body = useMemo(() => stripLeadingTitle(issue.content), [issue.content]);
+  const outline = useMemo(() => issueOutline(body), [body]);
+  const [active, setActive] = useState<string | null>(null);
+
+  // Only a newly opened issue starts at the top — not re-renders (e.g. marking it read).
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
-    const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+  }, [issue.id]);
+
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && closeRef.current();
     document.addEventListener('keydown', h);
     return () => document.removeEventListener('keydown', h);
-  }, [issue.id, onClose]);
+  }, []);
+
+  // Highlight the section currently being read.
+  useEffect(() => {
+    const root = scrollRef.current;
+    if (!root) return;
+    const headings = outline.map((s) => root.querySelector<HTMLElement>(`#${s.id}`)).filter(Boolean) as HTMLElement[];
+    if (!headings.length) return;
+    const onScroll = () => {
+      const top = root.getBoundingClientRect().top + 90;
+      let current: string | null = null;
+      for (const h of headings) if (h.getBoundingClientRect().top <= top) current = h.id;
+      // Short closing sections never reach the top; at the bottom, highlight the last one.
+      if (root.scrollTop + root.clientHeight >= root.scrollHeight - 4) current = headings[headings.length - 1].id;
+      setActive(current);
+    };
+    onScroll();
+    root.addEventListener('scroll', onScroll, { passive: true });
+    return () => root.removeEventListener('scroll', onScroll);
+  }, [outline]);
+
+  const jump = (id: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    scrollRef.current?.querySelector(`#${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const source = sourceName(issue.coverSourceUrl);
+  const isRead = !!issue.readAt;
 
   return (
     <motion.div
@@ -85,6 +131,20 @@ function NewsletterReader({ issue, onClose }: { issue: Newsletter; onClose: () =
         <button className="nl-back" onClick={onClose}>
           <ArrowLeft size={14} /> NEWSLETTERS
         </button>
+        {outline.length > 0 && (
+          <nav className="nl-sections" aria-label="Sections">
+            {outline.map((s) => (
+              <a
+                key={s.id}
+                href={`#${s.id}`}
+                className={`nl-section-link ${active === s.id ? 'nl-section-link--active' : ''}`}
+                onClick={jump(s.id)}
+              >
+                {navLabel(s.title)}
+              </a>
+            ))}
+          </nav>
+        )}
       </div>
 
       <figure className="nl-hero">
@@ -107,19 +167,58 @@ function NewsletterReader({ issue, onClose }: { issue: Newsletter; onClose: () =
         {issue.summary && <p className="nl-dek">{issue.summary}</p>}
       </header>
 
+      {outline.some((s) => s.stories.length) && (
+        <nav className="nl-contents" aria-label="In this issue">
+          <span className="nl-contents-label">In this issue</span>
+          {outline
+            .filter((s) => s.stories.length)
+            .map((s) => (
+              <div key={s.id} className="nl-contents-group">
+                <a href={`#${s.id}`} className="nl-contents-section" onClick={jump(s.id)}>
+                  {s.title}
+                </a>
+                <ol>
+                  {s.stories.map((st) => (
+                    <li key={st.id}>
+                      <a href={`#${st.id}`} onClick={jump(st.id)}>
+                        {st.title}
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ))}
+        </nav>
+      )}
+
       {/* Markdown only — no raw HTML from the routine is rendered. */}
       <article className="article-content nl-body">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeHeadingIds]}
           components={{
             a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
           }}
         >
-          {stripLeadingTitle(issue.content)}
+          {body}
         </ReactMarkdown>
       </article>
 
       <footer className="nl-footer">
+        {isRead ? (
+          <div className="nl-read-done">
+            <span className="nl-read-badge">
+              <Check size={14} /> Read
+            </span>
+            <button className="nl-link-btn" onClick={() => onSetRead(false)}>
+              Mark as unread
+            </button>
+          </div>
+        ) : (
+          <button className="nl-read-btn" onClick={() => onSetRead(true)}>
+            Read
+          </button>
+        )}
         <button className="nl-back" onClick={onClose}>
           <ArrowLeft size={14} /> ALL ISSUES
         </button>
@@ -130,7 +229,7 @@ function NewsletterReader({ issue, onClose }: { issue: Newsletter; onClose: () =
 
 // ── Issue grid ─────────────────────────────────────────────────────────────
 
-export default function Newsletters({ newsletters, cloud, onRefresh, onDelete }: NewslettersProps) {
+export default function Newsletters({ newsletters, cloud, onRefresh, onDelete, onSetRead }: NewslettersProps) {
   const [openId, setOpenId] = useState<string | null>(null);
   const open = newsletters.find((n) => n.id === openId) ?? null;
 
@@ -142,7 +241,12 @@ export default function Newsletters({ newsletters, cloud, onRefresh, onDelete }:
   if (open) {
     return (
       <AnimatePresence mode="wait">
-        <NewsletterReader key={open.id} issue={open} onClose={() => setOpenId(null)} />
+        <NewsletterReader
+          key={open.id}
+          issue={open}
+          onClose={() => setOpenId(null)}
+          onSetRead={(read) => onSetRead(open.id, read)}
+        />
       </AnimatePresence>
     );
   }
@@ -180,7 +284,7 @@ export default function Newsletters({ newsletters, cloud, onRefresh, onDelete }:
           {newsletters.map((n, i) => (
             <motion.div
               key={n.id}
-              className="lib-card"
+              className={`lib-card ${n.readAt ? 'nl-card--read' : ''}`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 12) * 0.04, duration: 0.3 } }}
               exit={{ opacity: 0, transition: { duration: 0.15 } }}
@@ -188,6 +292,11 @@ export default function Newsletters({ newsletters, cloud, onRefresh, onDelete }:
             >
               <div className={`lib-card-img-wrap hover-color-${highlightColors[hashId(n.id) % highlightColors.length]}`}>
                 <Cover issue={n} className="lib-card-img" />
+                {n.readAt && (
+                  <div className="lib-card-tags">
+                    <span className="lib-card-tag">READ</span>
+                  </div>
+                )}
                 <button
                   className="lib-card-delete"
                   title="Delete this issue"
