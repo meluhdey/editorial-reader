@@ -5012,3 +5012,150 @@ mark.hl-underline { text-decoration: underline; text-decoration-color: var(--ink
   .nl-dek { font-size: 19px; }
   .nl-body { font-size: 16px; }
 }
+
+/* ─── MOBILE (phones) ────────────────────────────────────────────────────────
+   Desktop keeps the vertical sidebar. On phones it becomes a bottom tab bar,
+   two-pane screens (Reader, Notebook) stack into one column, and grids drop
+   to a single column. */
+
+.navbar-mobile-item { display: none; }
+
+@media (max-width: 760px) {
+  :root { --mobile-bar: 58px; }
+
+  .app {
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .main-content {
+    min-height: 0;
+    padding-bottom: calc(var(--mobile-bar) + env(safe-area-inset-bottom));
+  }
+
+  /* Bottom tab bar */
+  .navbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    z-index: 150;
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: space-around;
+    width: 100%;
+    height: calc(var(--mobile-bar) + env(safe-area-inset-bottom));
+    padding: 0 4px env(safe-area-inset-bottom);
+    box-shadow: inset 0 1px 0 var(--border);
+    overflow: hidden;
+  }
+  .navbar > div[style] { display: none; }            /* the desktop spacer */
+  .navbar-article-tab { display: none !important; }   /* open-article tabs: desktop only */
+
+  .navbar-tab-vertical,
+  .navbar-logo-container {
+    flex: 1 1 0;
+    width: auto !important;
+    min-width: 0;
+    margin: 0;
+    padding: 0 !important;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+  }
+  .navbar-tab-vertical::before,
+  .navbar-tab-vertical::after { display: none !important; }
+  .navbar-tab-text,
+  .navbar-logo-text { display: none !important; }
+  .navbar-logo-container { order: 99; }
+
+  .navbar-mobile-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding-top: 2px;
+    border-top: 2px solid transparent;
+  }
+  .navbar-tab-vertical.active .navbar-mobile-item {
+    color: var(--ink);
+    border-top-color: var(--ink);
+  }
+
+  /* Phones zoom into inputs smaller than 16px; avoid that. */
+  input, textarea, select { font-size: max(16px, 1em); }
+
+  /* Touch screens have no hover: keep card actions visible */
+  .lib-card-delete, .lib-card-refresh { opacity: 0.9; }
+
+  /* Sign-in */
+  .auth-gate-wrapper { padding: 16px; }
+
+  /* Library & shared page headers */
+  .lib-header { padding-top: 28px; }
+  .lib-header-top { padding: 0 20px; }
+  .lib-filter-bar { padding: 12px 20px; }
+  .lib-filter-panel { padding-left: 20px; padding-right: 20px; }
+  .lib-grid { grid-template-columns: minmax(0, 1fr); }
+  .lib-card-meta { padding: 12px 16px 16px; }
+
+  /* Index */
+  .index-header { flex-wrap: wrap; gap: 14px; padding: 24px 20px 16px; }
+
+  /* Reader: article first, then topics / notes / highlights underneath */
+  .reader {
+    display: block;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .reader-left { overflow: visible; border-right: none; }
+  .reader-right { overflow: visible; border-top: 1px solid var(--border); }
+  .reader-article-img { height: 220px; }
+  .reader-article-header { padding: 28px 20px 16px; }
+  .reader-article-title { font-size: 32px; }
+  .article-content { padding: 16px 20px 48px; font-size: 18px; }
+  .reader-iframe-pane {
+    position: fixed;
+    inset: 0 0 calc(var(--mobile-bar) + env(safe-area-inset-bottom)) 0;
+    width: 100% !important;
+    z-index: 140;
+  }
+
+  /* Notebook: the dashboard lists notes; the editor takes the full screen */
+  .notebook-layout { grid-template-columns: minmax(0, 1fr); }
+  .notebook-sidebar { display: none; }
+  .notebook-writer-workspace { grid-template-columns: minmax(0, 1fr); position: relative; }
+  .notebook-writer-header {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 16px;
+  }
+  .notebook-writer-date { display: none; }
+  .notebook-editor-container { padding: 24px 20px 32px; gap: 16px; }
+  /* The quotes/curation drawer slides over the editor instead of sitting beside it */
+  .notebook-curator-drawer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    z-index: 20;
+    border-left: none;
+  }
+  .notebook-dashboard-header { flex-wrap: wrap; gap: 14px; padding: 24px 20px 18px; }
+
+  /* Newsletter reader sits above the tab bar */
+  .nl-footer { padding-bottom: 40px; }
+}
+
+@media (min-width: 601px) and (max-width: 760px) {
+  .lib-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

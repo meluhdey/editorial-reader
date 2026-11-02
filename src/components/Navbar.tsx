@@ -1,4 +1,5 @@
 import type { View, Article } from '../types';
+import { Network, Library as LibraryIcon, NotebookPen, BookMarked, Newspaper, Plus, CircleUser } from 'lucide-react';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface NavbarProps {
@@ -51,41 +52,70 @@ export default function Navbar({
         }}
       >
         <span className="navbar-logo-text">{logoText}</span>
+        <span className="navbar-mobile-item" aria-hidden="true">
+          <CircleUser size={19} strokeWidth={1.5} />
+          <span>Account</span>
+        </span>
       </button>
 
       <button
-        className={`navbar-tab-vertical ${currentView === 'graph' ? 'active' : ''}`}
+        className={`navbar-tab-vertical navbar-main-tab ${currentView === 'graph' ? 'active' : ''}`}
+        aria-label="Index"
         onClick={() => onNavigate('graph')}
       >
         <span className="navbar-tab-text">INDEX</span>
+        <span className="navbar-mobile-item" aria-hidden="true">
+          <Network size={19} strokeWidth={1.5} />
+          <span>Index</span>
+        </span>
       </button>
 
       <button
-        className={`navbar-tab-vertical ${currentView === 'library' ? 'active' : ''}`}
+        className={`navbar-tab-vertical navbar-main-tab ${currentView === 'library' ? 'active' : ''}`}
+        aria-label="Library"
         onClick={() => onNavigate('library')}
       >
         <span className="navbar-tab-text">LIBRARY</span>
+        <span className="navbar-mobile-item" aria-hidden="true">
+          <LibraryIcon size={19} strokeWidth={1.5} />
+          <span>Library</span>
+        </span>
       </button>
 
       <button
-        className={`navbar-tab-vertical ${currentView === 'notebook' ? 'active' : ''}`}
+        className={`navbar-tab-vertical navbar-main-tab ${currentView === 'notebook' ? 'active' : ''}`}
+        aria-label="Notebook"
         onClick={() => onNavigate('notebook')}
       >
         <span className="navbar-tab-text">NOTEBOOK</span>
+        <span className="navbar-mobile-item" aria-hidden="true">
+          <NotebookPen size={19} strokeWidth={1.5} />
+          <span>Notes</span>
+        </span>
       </button>
 
       <button
-        className={`navbar-tab-vertical ${currentView === 'books' ? 'active' : ''}`}
+        className={`navbar-tab-vertical navbar-main-tab ${currentView === 'books' ? 'active' : ''}`}
+        aria-label="Books"
         onClick={() => onNavigate('books')}
       >
         <span className="navbar-tab-text">BOOKS</span>
+        <span className="navbar-mobile-item" aria-hidden="true">
+          <BookMarked size={19} strokeWidth={1.5} />
+          <span>Books</span>
+        </span>
       </button>
 
       <button
-        className={`navbar-tab-vertical ${currentView === 'newsletters' ? 'active' : ''}`}
+        className={`navbar-tab-vertical navbar-main-tab ${currentView === 'newsletters' ? 'active' : ''}`}
+        aria-label="Newsletter"
         onClick={() => onNavigate('newsletters')}
       >
         <span className="navbar-tab-text">NEWSLETTER</span>
+        <span className="navbar-mobile-item" aria-hidden="true">
+          <Newspaper size={19} strokeWidth={1.5} />
+          <span>News</span>
+        </span>
       </button>
 
       {openArticles.map((article) => {
@@ -93,7 +123,7 @@ export default function Navbar({
         return (
           <div
             key={article.id}
-            className={`navbar-tab-vertical ${isActive ? 'active' : ''}`}
+            className={`navbar-tab-vertical navbar-article-tab ${isActive ? 'active' : ''}`}
             onClick={() => onNavigate('reader', article.id)}
           >
             <button
@@ -119,10 +149,15 @@ export default function Navbar({
 
       <button
         className="navbar-tab-vertical navbar-tab-add"
+        aria-label="Add article"
         onClick={onOpenSpotlight}
         title="Load article from URL (⌘K)"
       >
         <span className="navbar-tab-text">+</span>
+        <span className="navbar-mobile-item" aria-hidden="true">
+          <Plus size={19} strokeWidth={1.5} />
+          <span>Add</span>
+        </span>
       </button>
     </nav>
   );
